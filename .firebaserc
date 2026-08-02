@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "prod": "ucu-expense-tracker-app"
+  },
+  "targets": {},
+  "etags": {}
+}

@@ -1,0 +1,9 @@
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+  '@firebase/util': true
+  protobufjs: true
+  esbuild: true
+  re2: true
+minimumReleaseAgeExclude:
+  - shadcn@4.16.1
