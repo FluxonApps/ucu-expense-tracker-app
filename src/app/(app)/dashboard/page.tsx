@@ -7,7 +7,7 @@ import {
   startOfMonth,
   subMonths,
 } from "date-fns";
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -202,6 +202,16 @@ export default function DashboardPage() {
           Your finances for {format(now, "MMMM yyyy")}
         </p>
       </div>
+
+
+      {ratesError && (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-100 px-4 py-3 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-400">
+          <AlertTriangle className="size-5 shrink-0" />
+          <p>
+            <strong>Cannot update currency rates.</strong> Converted totals may be inaccurate.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
