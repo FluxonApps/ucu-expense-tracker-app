@@ -329,7 +329,7 @@ export default function DashboardPage() {
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={dailyData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} interval={2} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} interval={0} />
                 <YAxis tickLine={false} axisLine={false} fontSize={11} width={50} />
                 <Tooltip
                   formatter={(value) => [`${Number(value).toLocaleString("uk-UA")} ₴`, "Spent"]}
