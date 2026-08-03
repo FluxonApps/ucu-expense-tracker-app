@@ -63,6 +63,12 @@ export async function createTransaction(
   const wallet = walletSnap.data();
 
   const delta = input.type === "income" ? input.amountMinor : -input.amountMinor;
+  const newBalance = wallet.balanceMinor + delta;
+
+  if (newBalance < 0) {
+    throw new Error("Insufficient balance: this expense would make the wallet negative");
+  }
+
   await setDoc(txRef, {
     id: txRef.id,
     type: input.type,
@@ -74,7 +80,7 @@ export async function createTransaction(
     note: input.note,
     createdAt: serverTimestamp() as unknown as Timestamp,
   });
-  await updateDoc(wRef, { balanceMinor: wallet.balanceMinor + delta });
+  await updateDoc(wRef, { balanceMinor: newBalance });
 }
 
 export async function updateTransaction(
@@ -115,6 +121,11 @@ export async function createTransfer(uid: string, input: TransferInput): Promise
     const toSnap = await t.get(toRef);
     if (!fromSnap.exists() || !toSnap.exists()) throw new Error("Wallet not found");
 
+    const newFromBalance = fromSnap.data().balanceMinor - input.amountMinor;
+    if (newFromBalance < 0) {
+      throw new Error("Insufficient balance: this transfer would make the wallet negative");
+    }
+
     t.set(txRef, {
       id: txRef.id,
       type: "transfer",
@@ -127,7 +138,7 @@ export async function createTransfer(uid: string, input: TransferInput): Promise
       note: input.note,
       createdAt: serverTimestamp() as unknown as Timestamp,
     });
-    t.update(fromRef, { balanceMinor: fromSnap.data().balanceMinor - input.amountMinor });
+    t.update(fromRef, { balanceMinor: newFromBalance });
   });
 }
 
