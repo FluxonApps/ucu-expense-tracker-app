@@ -128,7 +128,6 @@ export async function createTransfer(uid: string, input: TransferInput): Promise
       createdAt: serverTimestamp() as unknown as Timestamp,
     });
     t.update(fromRef, { balanceMinor: fromSnap.data().balanceMinor - input.amountMinor });
-    t.update(toRef, { balanceMinor: toSnap.data().balanceMinor + input.toAmountMinor });
   });
 }
 
