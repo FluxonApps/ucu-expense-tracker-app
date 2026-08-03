@@ -55,6 +55,10 @@ export async function createTransaction(
   uid: string,
   input: TransactionInput
 ): Promise<void> {
+  if (input.amountMinor <= 0) {
+    throw new Error("Transaction amount must be greater than zero");
+  }
+
   const txRef = doc(transactionsRef(uid));
   const wRef = walletRef(uid, input.walletId);
 
@@ -88,6 +92,10 @@ export async function updateTransaction(
   txId: string,
   input: TransactionInput
 ): Promise<void> {
+  if (input.amountMinor <= 0) {
+    throw new Error("Transaction amount must be greater than zero");
+  }
+
   const txRef = transactionRef(uid, txId);
   const txSnap = await getDoc(txRef);
   if (!txSnap.exists()) throw new Error("Transaction not found");
@@ -112,6 +120,11 @@ export async function createTransfer(uid: string, input: TransferInput): Promise
   if (input.walletId === input.toWalletId) {
     throw new Error("Cannot transfer to the same wallet");
   }
+
+  if (input.amountMinor <= 0 || input.toAmountMinor <= 0) {
+    throw new Error("Transfer amount must be greater than zero");
+  }
+
   const txRef = doc(transactionsRef(uid));
   const fromRef = walletRef(uid, input.walletId);
   const toRef = walletRef(uid, input.toWalletId);
