@@ -242,7 +242,7 @@ export default function DashboardPage() {
           <CardContent>
             <p className="flex items-center gap-2 text-2xl font-semibold tabular-nums text-red-600 dark:text-red-500">
               <TrendingDown className="size-5" />
-              {formatMoney(monthExpense, BASE_CURRENCY)} ₴
+              {formatMoney(monthExpense, BASE_CURRENCY)}
             </p>
           </CardContent>
         </Card>
