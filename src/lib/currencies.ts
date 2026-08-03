@@ -17,6 +17,7 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   PLN: "zł",
 };
 
+
 /** Format an amount in minor units (kopiykas/cents) for display. */
 export function formatMoney(amountMinor: number, currency: CurrencyCode): string {
   const major = amountMinor / 100;
