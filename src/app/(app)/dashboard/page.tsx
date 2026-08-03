@@ -32,6 +32,7 @@ import { formatMoney } from "@/lib/currencies";
 import { subscribeToTransactionsInRange } from "@/lib/firestore/transactions";
 import type { CurrencyCode, Transaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {convertMinor, useCurrencyRates } from "@/lib/use-currency-rates";
 
 const BASE_CURRENCY: CurrencyCode = "UAH";
 
@@ -73,13 +74,14 @@ export default function DashboardPage() {
     return unsubscribe;
   }, [user, rangeStart, rangeEnd]);
 
+  // Get the currency rates
+  const { rates, loading: ratesLoading, error: ratesError } = useCurrencyRates();
   /** Converts an amount into the base currency. */
   const toBase = useMemo(() => {
     return (amountMinor: number, _currency: CurrencyCode): number => {
-      // TODO: convert using rates from /api/currency (see src/lib/use-currency-rates.ts)
-      return amountMinor;
+      return convertMinor(amountMinor, _currency, BASE_CURRENCY, rates) ?? 0;
     };
-  }, []);
+  }, [rates]);
 
   const totalBalanceMinor = useMemo(
     () => wallets.reduce((sum, w) => sum + toBase(w.balanceMinor, w.currency), 0),
@@ -104,7 +106,7 @@ export default function DashboardPage() {
     () =>
       monthTxs
         .filter((tx) => tx.type === "expense")
-        .reduce((sum, tx) => sum + toBase(tx.amountMinor, tx.currency) / 100, 0),
+        .reduce((sum, tx) => sum + toBase(tx.amountMinor, tx.currency), 0),
     [monthTxs, toBase]
   );
 
@@ -170,7 +172,7 @@ export default function DashboardPage() {
 
   const topCategories = pieData.slice(0, 5);
 
-  const loading = walletsLoading || txLoading;
+  const loading = walletsLoading || txLoading || ratesLoading;
 
   if (loading) {
     return (
@@ -240,7 +242,7 @@ export default function DashboardPage() {
           <CardContent>
             <p className="flex items-center gap-2 text-2xl font-semibold tabular-nums text-red-600 dark:text-red-500">
               <TrendingDown className="size-5" />
-              {monthExpense} ₴
+              {formatMoney(monthExpense, BASE_CURRENCY)} ₴
             </p>
           </CardContent>
         </Card>
