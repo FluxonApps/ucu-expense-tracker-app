@@ -97,18 +97,37 @@ export async function updateTransaction(
   }
 
   const txRef = transactionRef(uid, txId);
-  const txSnap = await getDoc(txRef);
-  if (!txSnap.exists()) throw new Error("Transaction not found");
-  if (txSnap.data().type === "transfer") throw new Error("Transfers cannot be edited");
+  const wRef = walletRef(uid, input.walletId);
 
-  await updateDoc(txRef, {
-    type: input.type,
-    amountMinor: input.amountMinor,
-    currency: input.currency,
-    walletId: input.walletId,
-    categoryId: input.categoryId,
-    date: Timestamp.fromDate(input.date),
-    note: input.note,
+  await runTransaction(db, async (t) => {
+    const txSnap = await t.get(txRef);
+    if (!txSnap.exists()) throw new Error("Transaction not found");
+    const oldTx = txSnap.data();
+    if (oldTx.type === "transfer") throw new Error("Transfers cannot be edited");
+
+    const walletSnap = await t.get(wRef);
+    if (!walletSnap.exists()) throw new Error("Wallet not found");
+    const wallet = walletSnap.data();
+
+    const oldDelta = oldTx.type === "income" ? -oldTx.amountMinor : oldTx.amountMinor;
+    const newDelta = input.type === "income" ? input.amountMinor : -input.amountMinor;
+
+    const newBalance = wallet.balanceMinor + oldDelta + newDelta;
+
+    if (newBalance < 0) {
+      throw new Error("Insufficient balance: this change would make the wallet negative");
+    }
+
+    t.update(txRef, {
+      type: input.type,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      walletId: input.walletId,
+      categoryId: input.categoryId,
+      date: Timestamp.fromDate(input.date),
+      note: input.note,
+    });
+    t.update(wRef, { balanceMinor: newBalance });
   });
 }
 
