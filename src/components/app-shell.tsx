@@ -10,7 +10,7 @@ import {
   WalletMinimal,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth-provider";
@@ -54,6 +54,7 @@ function ThemeToggle() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, signOut } = useAuth();
 
   const initials = (user?.displayName || user?.email || "?")
@@ -131,7 +132,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {user?.displayName || user?.email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => signOut()}>
+                <DropdownMenuItem onClick={async () => {
+                  await signOut();
+                  window.location.href = "/";
+                }}>
                   <LogOut className="size-4" />
                   Sign out
                 </DropdownMenuItem>
