@@ -4,6 +4,8 @@ export type CurrencyCode = "UAH" | "USD" | "EUR" | "PLN";
 
 export type TransactionType = "income" | "expense" | "transfer";
 
+export type WalletType = "standard" | "credit";
+
 export interface UserProfile {
   displayName: string;
   email: string;
@@ -19,6 +21,17 @@ export interface Wallet {
   balanceMinor: number;
   icon: string;
   color: string;
+  walletType: WalletType;
+  /**
+   * Only set when walletType is "credit". The most negative balanceMinor
+   * can go (i.e. the credit line), in minor units.
+   */
+  creditLimitMinor?: number;
+  /**
+   * Only set when walletType is "credit". Day of month (1-31) the credit
+   * balance is due to be topped up / paid off.
+   */
+  creditDueDay?: number;
   createdAt: Timestamp;
 }
 
