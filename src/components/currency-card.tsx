@@ -49,12 +49,9 @@ const CustomTooltip = ({ active, payload }: any) => {
         <p className="font-semibold text-neutral-300 border-b border-neutral-800 pb-1 mb-1">
           {data.day}
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-neutral-400">
-            Куп: <b className="text-emerald-400 font-semibold">{data.buy.toFixed(2)} ₴</b>
-          </span>
-          <span className="text-neutral-400">
-            Прод: <b className="text-sky-400 font-semibold">{data.sell.toFixed(2)} ₴</b>
+            NBU Rate: <b className="text-emerald-400 font-semibold">{data.rate.toFixed(2)} ₴</b>
           </span>
         </div>
       </div>
@@ -65,7 +62,8 @@ const CustomTooltip = ({ active, payload }: any) => {
 
 export function CurrencyCard() {
   const [selectedCurrency, setSelectedCurrency] = useState<"USD" | "EUR" | "PLN">("USD");
-  const [historyData, setHistoryData] = useState<Record<string, { day: string; buy: number; sell: number }[]>>({});
+  const [historyData, setHistoryData] = useState<Record<string, { day: string; rate: number }[]>>({});
+  const [realRates, setRealRates] = useState<Record<string, { buy: number; sell: number }>>({});
   const [loading, setLoading] = useState(true);
 
   const [amount, setAmount] = useState<string>("100");
@@ -75,12 +73,24 @@ export function CurrencyCard() {
     async function fetchRates() {
       try {
         const res = await fetch("/api/currency");
+        if (!res.ok) throw new Error("Failed to load");
         const data = await res.json();
+
         if (data.history) {
           setHistoryData(data.history);
         }
+
+        if (data.rates) {
+          const mapped: Record<string, { buy: number; sell: number }> = {};
+          data.rates.forEach((r: any) => {
+            if (r.to === "UAH") {
+              mapped[r.from] = { buy: r.rateBuy, sell: r.rateSell };
+            }
+          });
+          setRealRates(mapped);
+        }
       } catch (err) {
-        console.error("Failed to load currency history", err);
+        console.error("Failed to load currency data", err);
       } finally {
         setLoading(false);
       }
@@ -89,15 +99,14 @@ export function CurrencyCard() {
   }, []);
 
   const chartData = historyData[selectedCurrency] || [];
-  const latestRate = chartData[chartData.length - 1];
-  const firstRate = chartData[0];
+  const activeRates = realRates[selectedCurrency];
 
-  const currentBuy = latestRate?.buy ?? 0;
-  const currentSell = latestRate?.sell ?? 0;
+  const currentBuy = activeRates?.buy ?? chartData[chartData.length - 1]?.rate ?? 0;
+  const currentSell = activeRates?.sell ?? chartData[chartData.length - 1]?.rate ?? 0;
 
-  const firstBuy = firstRate?.buy ?? currentBuy;
-  const buyDiff = currentBuy - firstBuy;
-  const buyPercent = firstBuy ? ((buyDiff / firstBuy) * 100).toFixed(2) : "0.00";
+  const firstRate = chartData[0]?.rate ?? currentBuy;
+  const buyDiff = currentBuy - firstRate;
+  const buyPercent = firstRate ? ((buyDiff / firstRate) * 100).toFixed(2) : "0.00";
   const isBuyUp = buyDiff >= 0;
 
   const parsedAmount = parseFloat(amount) || 0;
@@ -107,7 +116,7 @@ export function CurrencyCard() {
     ? (convertDirection === "TO_UAH"
         ? parsedAmount * rateToUse
         : parsedAmount / rateToUse
-      ).toLocaleString("uk-UA", { maximumFractionDigits: 2 })
+      ).toLocaleString("en-US", { maximumFractionDigits: 2 })
     : "0";
 
   const toggleDirection = () => {
@@ -126,7 +135,7 @@ export function CurrencyCard() {
           </CardTitle>
           <p className="text-xs text-neutral-400 flex items-center gap-1 mt-0.5">
             <RefreshCw className="size-3 text-neutral-500 animate-spin-slow" />
-            NBU API (UAH)
+            Monobank / NBU API (UAH)
           </p>
         </div>
 
@@ -148,7 +157,7 @@ export function CurrencyCard() {
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center rounded-xl bg-neutral-800/40 p-3.5 border border-neutral-800/80">
           <div className="space-y-1">
-            <span className="text-xs font-medium text-neutral-400">Купівля / Продаж</span>
+            <span className="text-xs font-medium text-neutral-400">Buy / Sell</span>
             {loading ? (
               <Skeleton className="h-8 w-32 bg-neutral-800" />
             ) : (
@@ -169,7 +178,7 @@ export function CurrencyCard() {
                   </span>
                 </div>
                 <div className="text-xs text-neutral-400">
-                  Продаж: <span className="font-semibold text-sky-400">{currentSell.toFixed(2)} ₴</span>
+                  Sell: <span className="font-semibold text-sky-400">{currentSell.toFixed(2)} ₴</span>
                 </div>
               </div>
             )}
@@ -191,7 +200,7 @@ export function CurrencyCard() {
                   <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#525252", strokeWidth: 1, strokeDasharray: "2 2" }} />
                   <Area
                     type="monotone"
-                    dataKey="buy"
+                    dataKey="rate"
                     stroke={isBuyUp ? "#34d399" : "#f87171"}
                     strokeWidth={2}
                     fill="url(#currencyTrend)"
@@ -205,9 +214,9 @@ export function CurrencyCard() {
 
         <div className="rounded-xl bg-neutral-800/30 p-3 border border-neutral-800/60 space-y-2">
           <div className="flex items-center justify-between text-xs text-neutral-400">
-            <span className="font-medium">Швидка конвертація</span>
+            <span className="font-medium">Quick Converter</span>
             <span>
-              {convertDirection === "TO_UAH" ? "За курсом купівлі" : "За курсом продажу"}
+              {convertDirection === "TO_UAH" ? "At buy rate" : "At sell rate"}
             </span>
           </div>
 
@@ -218,7 +227,7 @@ export function CurrencyCard() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="bg-neutral-900 border-neutral-700 text-white h-9 text-sm pr-12 focus-visible:ring-1 focus-visible:ring-emerald-500"
-                placeholder="Сума"
+                placeholder="Amount"
               />
               <span className="absolute right-2.5 top-2 text-xs font-semibold text-neutral-400">
                 {inputCurrency}
@@ -228,7 +237,7 @@ export function CurrencyCard() {
             <button
               onClick={toggleDirection}
               type="button"
-              title="Змінити напрямок конвертації"
+              title="Switch direction"
               className="p-2 rounded-md bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition border border-neutral-700 shrink-0"
             >
               <ArrowRightLeft className="size-4" />
