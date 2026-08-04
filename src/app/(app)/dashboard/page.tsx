@@ -260,6 +260,105 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Budget Goals</CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          Budget goals will be here
+        </CardContent>
+      </Card> */}
+            {/* Budget goals — блок на всю ширину сторінки */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Budget goals</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Track spending limits for selected categories
+          </p>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {/* Тимчасові дані для перевірки дизайну */}
+          {[
+            {
+              name: "Food",
+              spentMinor: 600000,
+              limitMinor: 1000000,
+              color: "#3b82f6",
+            },
+            {
+              name: "Transport",
+              spentMinor: 400000,
+              limitMinor: 1000000,
+              color: "#22c55e",
+            },
+          ].map((goal) => {
+            // Відсоток використаного бюджету
+            const percentage = Math.min(
+              (goal.spentMinor / goal.limitMinor) * 100,
+              100
+            );
+
+            // Скільки грошей залишилося
+            const remainingMinor = Math.max(
+              goal.limitMinor - goal.spentMinor,
+              0
+            );
+
+            return (
+              <div key={goal.name} className="space-y-2">
+                {/* Назва категорії та відсоток */}
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">{goal.name}</p>
+
+                  <p className="text-sm text-muted-foreground">
+                    {Math.round(percentage)}%
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  {/* Фон progress bar */}
+                  <div className="relative h-10 flex-1 overflow-hidden rounded-full bg-muted">
+                    {/* Заповнена частина progress bar */}
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${percentage}%`,
+                        backgroundColor: goal.color,
+                      }}
+                    />
+
+                    {/* Витрачено */}
+                    <span className="absolute inset-y-0 left-4 flex items-center text-sm font-medium">
+                      {formatMoney(goal.spentMinor, BASE_CURRENCY)}
+                    </span>
+
+                    {/* Залишилося */}
+                    <span className="absolute inset-y-0 right-4 flex items-center text-sm font-medium">
+                      {formatMoney(remainingMinor, BASE_CURRENCY)}
+                    </span>
+                  </div>
+
+                  {/* Текст праворуч від progress bar */}
+                  <p className="text-sm text-muted-foreground sm:w-44">
+                    час
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Кнопка для майбутнього додавання нової категорії */}
+          <button
+            type="button"
+            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            + Add category
+          </button>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
