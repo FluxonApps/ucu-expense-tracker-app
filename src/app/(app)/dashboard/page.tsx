@@ -123,7 +123,9 @@ export default function DashboardPage() {
           color: category.color,
           value: Math.round(valueMinor / 100),
         };
-      });
+      })
+        .filter((entry) => entry.value > 0)
+        .sort((a, b) => b.value - a.value);
   }, [monthTxs, categories, toBase]);
 
   // Bars: income vs expenses per month for the last 6 months
@@ -280,8 +282,8 @@ export default function DashboardPage() {
                       outerRadius={90}
                       paddingAngle={2}
                     >
-                      {pieData.map((entry, index) => (
-                        <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      {pieData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip
