@@ -194,7 +194,8 @@ export default function DashboardPage() {
   }
 
   const categoryOf = (id?: string) => categories.find((c) => c.id === id);
-  const walletName = (id: string) => wallets.find((w) => w.id === id)?.name;
+  const walletName = (id: string, storedName?: string) =>
+    wallets.find((w) => w.id === id)?.name ?? storedName ?? "Deleted wallet";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -395,7 +396,10 @@ export default function DashboardPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
                         {tx.type === "transfer"
-                          ? `${walletName(tx.walletId)} → ${walletName(tx.toWalletId ?? "")}`
+                          ? `${walletName(tx.walletId, tx.walletName)} → ${walletName(
+                              tx.toWalletId ?? "",
+                              tx.toWalletName
+                            )}`
                           : tx.note || category?.name || "Transaction"}
                       </p>
                       <p className="text-xs text-muted-foreground">

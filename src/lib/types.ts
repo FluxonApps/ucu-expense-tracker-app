@@ -38,8 +38,12 @@ export interface Transaction {
   amountMinor: number;
   currency: CurrencyCode;
   walletId: string;
+  /** Wallet name retained for history if the wallet is later deleted. */
+  walletName?: string;
   /** Destination wallet for transfers. */
   toWalletId?: string;
+  /** Destination wallet name retained for transfer history after deletion. */
+  toWalletName?: string;
   /** Amount credited to the destination wallet (after conversion), minor units. */
   toAmountMinor?: number;
   /** Not set for transfers. */

@@ -193,7 +193,8 @@ export default function TransactionsPage() {
     setDateTo(undefined);
   };
 
-  const walletName = (id: string) => wallets.find((w) => w.id === id)?.name;
+  const walletName = (id: string, storedName?: string) =>
+    wallets.find((w) => w.id === id)?.name ?? storedName ?? "Deleted wallet";
   const categoryOf = (id?: string) => categories.find((c) => c.id === id);
 
   return (
@@ -331,8 +332,11 @@ export default function TransactionsPage() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {tx.type === "transfer"
-                          ? `${walletName(tx.walletId)} → ${walletName(tx.toWalletId ?? "")}`
-                          : walletName(tx.walletId)}
+                          ? `${walletName(tx.walletId, tx.walletName)} → ${walletName(
+                              tx.toWalletId ?? "",
+                              tx.toWalletName
+                            )}`
+                          : walletName(tx.walletId, tx.walletName)}
                       </TableCell>
                       <TableCell className="text-right">
                         <span
