@@ -35,7 +35,8 @@ import {
   createTransfer,
   updateTransaction,
 } from "@/lib/firestore/transactions";
-import type { Transaction } from "@/lib/types";
+import type { CurrencyCode, Transaction } from "@/lib/types";
+import { convertMinor, useCurrencyRates } from "@/lib/use-currency-rates";
 
 type FormType = "expense" | "income" | "transfer";
 
@@ -56,6 +57,7 @@ export function TransactionFormDialog({
 }: TransactionFormDialogProps) {
   const { user } = useAuth();
   const { wallets, categories } = useData();
+  const { rates, loading: ratesLoading, error: ratesError } = useCurrencyRates();
   const isEdit = Boolean(transaction);
 
   const [type, setType] = useState<FormType>("expense");
@@ -63,7 +65,6 @@ export function TransactionFormDialog({
   const [walletId, setWalletId] = useState("");
   const [toWalletId, setToWalletId] = useState("");
   const [toAmount, setToAmount] = useState("");
-  const [toAmountTouched, setToAmountTouched] = useState(false);
   const [categoryId, setCategoryId] = useState("");
   const [date, setDate] = useState<Date>(new Date());
   const [note, setNote] = useState("");
@@ -92,7 +93,6 @@ export function TransactionFormDialog({
       setDate(new Date());
       setNote("");
     }
-    setToAmountTouched(false);
   }, [open, transaction, wallets]);
 
   const fromWallet = wallets.find((w) => w.id === walletId);
@@ -111,23 +111,70 @@ export function TransactionFormDialog({
     }
   }, [type, categoryId, filteredCategories]);
 
-  // Keep same-currency transfers in sync so users don't type the amount twice.
   const amountMinor = parseAmountToMinor(amount);
-  useEffect(() => {
-    if (type !== "transfer" || toAmountTouched) return;
-    if (!fromWallet || !toWallet) return;
-    if (fromWallet.currency === toWallet.currency) {
-      setToAmount(amount);
-    }
-    // TODO: prefill cross-currency transfers using rates from /api/currency
-  }, [type, amount, fromWallet, toWallet, toAmountTouched]);
+
+  function formatInputAmount(valueMinor: number): string {
+    return (valueMinor / 100).toFixed(2);
+  }
+
+  function convertInputAmount(
+    value: string,
+    fromCurrency: CurrencyCode,
+    toCurrency: CurrencyCode
+  ): string {
+    if (!value.trim()) return "";
+
+    const valueMinor = parseAmountToMinor(value);
+    if (valueMinor === null) return "";
+
+    const converted = convertMinor(valueMinor, fromCurrency, toCurrency, rates);
+    return converted === null ? "" : formatInputAmount(converted);
+  }
+
+  function handleAmountChange(value: string) {
+    setAmount(value);
+    setToAmount(
+      fromWallet && toWallet
+        ? convertInputAmount(value, fromWallet.currency, toWallet.currency)
+        : ""
+    );
+  }
+
+  function handleToAmountChange(value: string) {
+    setToAmount(value);
+    setAmount(
+      fromWallet && toWallet
+        ? convertInputAmount(value, toWallet.currency, fromWallet.currency)
+        : ""
+    );
+  }
+
+  function handleFromWalletChange(nextWalletId: string) {
+    const nextFromWallet = wallets.find((wallet) => wallet.id === nextWalletId);
+    setWalletId(nextWalletId);
+    setToAmount(
+      nextFromWallet && toWallet
+        ? convertInputAmount(amount, nextFromWallet.currency, toWallet.currency)
+        : ""
+    );
+  }
+
+  function handleToWalletChange(nextWalletId: string) {
+    const nextToWallet = wallets.find((wallet) => wallet.id === nextWalletId);
+    setToWalletId(nextWalletId);
+    setToAmount(
+      fromWallet && nextToWallet
+        ? convertInputAmount(amount, fromWallet.currency, nextToWallet.currency)
+        : ""
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    if (amountMinor === null) {
-      toast.error("Amount must be a number");
+    if (amountMinor === null || amountMinor <= 0) {
+      toast.error("Amount must be greater than zero");
       return;
     }
     if (!walletId) {
@@ -156,8 +203,8 @@ export function TransactionFormDialog({
         return;
       }
       const toAmountMinor = parseAmountToMinor(toAmount);
-      if (toAmountMinor === null) {
-        toast.error("Received amount must be a number");
+      if (toAmountMinor === null || toAmountMinor <= 0) {
+        toast.error("Exchange rate is unavailable. Please try again shortly.");
         return;
       }
       setSubmitting(true);
@@ -255,7 +302,7 @@ export function TransactionFormDialog({
                 placeholder="0.00"
                 inputMode="decimal"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => handleAmountChange(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
@@ -280,7 +327,7 @@ export function TransactionFormDialog({
 
           <div className="space-y-1.5">
             <Label>{type === "transfer" ? "From wallet" : "Wallet"}</Label>
-            <Select value={walletId} onValueChange={setWalletId}>
+            <Select value={walletId} onValueChange={handleFromWalletChange}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Choose a wallet" />
               </SelectTrigger>
@@ -301,7 +348,7 @@ export function TransactionFormDialog({
             <>
               <div className="space-y-1.5">
                 <Label>To wallet</Label>
-                <Select value={toWalletId} onValueChange={setToWalletId}>
+                <Select value={toWalletId} onValueChange={handleToWalletChange}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Choose a destination wallet" />
                   </SelectTrigger>
@@ -320,7 +367,7 @@ export function TransactionFormDialog({
                   </SelectContent>
                 </Select>
               </div>
-              {toWallet && fromWallet && toWallet.currency !== fromWallet.currency && (
+              {toWallet && fromWallet && (
                 <div className="space-y-1.5">
                   <Label htmlFor="tx-to-amount">
                     Received amount ({toWallet.currency})
@@ -330,13 +377,14 @@ export function TransactionFormDialog({
                     placeholder="0.00"
                     inputMode="decimal"
                     value={toAmount}
-                    onChange={(e) => {
-                      setToAmount(e.target.value);
-                      setToAmountTouched(true);
-                    }}
+                    onChange={(e) => handleToAmountChange(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Enter the amount that actually arrived in the destination wallet.
+                    {ratesLoading
+                      ? "Loading exchange rate..."
+                      : ratesError
+                        ? "Exchange rate is unavailable."
+                        : "Both amounts stay in sync using the current exchange rate."}
                   </p>
                 </div>
               )}
