@@ -287,7 +287,7 @@ export default function TransactionsPage() {
             </div>
           ) : (
             <Table>
-              <TableHeader className="bg-neutral-50">
+              <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Category</TableHead>
