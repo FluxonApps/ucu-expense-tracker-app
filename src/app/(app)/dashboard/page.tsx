@@ -1,13 +1,25 @@
 "use client";
 
 import {
+  addDays,
+  differenceInCalendarDays,
   eachDayOfInterval,
   endOfMonth,
   format,
+  startOfDay,
   startOfMonth,
   subMonths,
 } from "date-fns";
-import { AlertTriangle, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, TrendingDown, TrendingUp } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDownLeft,
+  ArrowLeftRight,
+  ArrowUpRight,
+  MoreVertical,
+  Plus,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -26,28 +38,107 @@ import { useAuth } from "@/components/auth-provider";
 import { useData } from "@/components/data-provider";
 import { AppIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+import { Button } from "@/components/ui/button";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatMoney } from "@/lib/currencies";
+import {
+  createBudgetGoal,
+  deleteBudgetGoal,
+  subscribeToBudgetGoals,
+  updateBudgetGoal,
+} from "@/lib/firestore/budgets";
 import { subscribeToTransactionsInRange } from "@/lib/firestore/transactions";
-import type { CurrencyCode, Transaction } from "@/lib/types";
+import type {
+  BudgetGoal,
+  CurrencyCode,
+  Transaction,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
-import {convertMinor, useCurrencyRates } from "@/lib/use-currency-rates";
+import {
+  convertMinor,
+  useCurrencyRates,
+} from "@/lib/use-currency-rates";
 
 const BASE_CURRENCY: CurrencyCode = "UAH";
 
-const CHART_COLORS = [
-  "#3b82f6",
-  "#22c55e",
-  "#f97316",
-  "#8b5cf6",
-  "#ef4444",
-  "#eab308",
-  "#06b6d4",
-  "#ec4899",
-  "#6366f1",
-  "#737373",
-];
+/**
+ * Finds the active repeating cycle for a goal.
+ *
+ * No Firestore update is required when a cycle expires.
+ * The active period is calculated from startDate and periodDays.
+ */
+function getCurrentGoalCycle(goal: BudgetGoal, currentDate: Date) {
+  const firstStart = startOfDay(goal.startDate.toDate());
+  const today = startOfDay(currentDate);
+
+  const elapsedDays = Math.max(
+    differenceInCalendarDays(today, firstStart),
+    0
+  );
+
+  const cycleIndex = Math.floor(elapsedDays / goal.periodDays);
+
+  const cycleStart = addDays(
+    firstStart,
+    cycleIndex * goal.periodDays
+  );
+
+  const cycleEnd = addDays(
+    cycleStart,
+    goal.periodDays - 1
+  );
+
+  const daysLeft = differenceInCalendarDays(
+    cycleEnd,
+    today
+  );
+
+  return {
+    cycleStart,
+    cycleEnd,
+    daysLeft,
+    isLastDay: daysLeft === 0,
+  };
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -56,7 +147,42 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [txLoading, setTxLoading] = useState(true);
 
-  const now = useMemo(() => new Date(), []);
+  // Budget goals loaded from Firestore.
+  const [budgetGoals, setBudgetGoals] = useState<BudgetGoal[]>([]);
+  const [budgetGoalsLoading, setBudgetGoalsLoading] = useState(true);
+
+  // Create/edit dialog.
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<BudgetGoal | null>(null);
+
+  // Form fields.
+  const [goalCategoryId, setGoalCategoryId] = useState("");
+  const [goalAmount, setGoalAmount] = useState("");
+  const [goalDeadline, setGoalDeadline] = useState("");
+
+  // Confirmation before editing.
+  const [editConfirmationOpen, setEditConfirmationOpen] = useState(false);
+
+  // Delete confirmation.
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] =
+    useState(false);
+
+  const [goalToDelete, setGoalToDelete] =
+    useState<BudgetGoal | null>(null);
+  const [goalSaving, setGoalSaving] = useState(false);
+  const [goalError, setGoalError] = useState<string | null>(null);
+
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    // Refresh the current date regularly so a new cycle
+    // begins automatically even when the page stays open.
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
   const rangeStart = useMemo(() => startOfMonth(subMonths(now, 5)), [now]);
   const rangeEnd = useMemo(() => endOfMonth(now), [now]);
 
@@ -73,6 +199,36 @@ export default function DashboardPage() {
     );
     return unsubscribe;
   }, [user, rangeStart, rangeEnd]);
+
+  useEffect(() => {
+  // Якщо користувач вийшов із профілю,
+  // очищаємо цілі, які належали попередньому користувачу.
+    if (!user) {
+      setBudgetGoals([]);
+      setBudgetGoalsLoading(false);
+      return;
+    }
+
+  /*
+   * Підписуємося на колекцію budgetGoals у Firestore.
+   *
+   * Функція setBudgetGoals буде викликана:
+   * - після першого завантаження;
+   * - після створення цілі;
+   * - після редагування цілі.
+   */
+    const unsubscribe = subscribeToBudgetGoals(
+      user.uid,
+      (nextGoals) => {
+        setBudgetGoals(nextGoals);
+        setBudgetGoalsLoading(false);
+      }
+    );
+
+  // React викликає unsubscribe, коли сторінка закривається
+  // або змінюється користувач.
+    return unsubscribe;
+  }, [user]);
 
   // Get the currency rates
   const { rates, loading: ratesLoading, error: ratesError } = useCurrencyRates();
@@ -174,7 +330,203 @@ export default function DashboardPage() {
 
   const topCategories = pieData.slice(0, 5);
 
-  const loading = walletsLoading || txLoading || ratesLoading;
+  /**
+ * Відкриває порожню форму створення нової цілі.
+ */
+  const openCreateGoalDialog = () => {
+    // null означає, що ми створюємо нову ціль,
+    // а не редагуємо наявну.
+    setEditingGoal(null);
+
+    // Очищаємо поля попередньої форми.
+    setGoalCategoryId("");
+    setGoalAmount("");
+
+    /*
+    * За замовчуванням пропонуємо дедлайн через 30 днів.
+    * 29 додається тому, що перший день також входить у період.
+    */
+    setGoalDeadline(format(addDays(now, 29), "yyyy-MM-dd"));
+
+    setGoalError(null);
+    setGoalDialogOpen(true);
+  };
+
+  /**
+   * Відкриває форму редагування і заповнює її
+   * поточними значеннями цілі.
+   */
+  const openEditGoalDialog = (goal: BudgetGoal) => {
+    const cycle = getCurrentGoalCycle(goal, now);
+
+    setEditingGoal(goal);
+    setGoalCategoryId(goal.categoryId);
+
+    // У Firestore сума зберігається в копійках,
+    // а у форму потрібно показати гривні.
+    setGoalAmount((goal.limitMinor / 100).toString());
+
+    // HTML input type="date" потребує формат yyyy-MM-dd.
+    setGoalDeadline(format(cycle.cycleEnd, "yyyy-MM-dd"));
+
+    setGoalError(null);
+    setGoalDialogOpen(true);
+  };
+
+  /**
+ * Формує список категорій, які можна вибрати для нової цілі.
+ */
+  const availableGoalCategories = useMemo(() => {
+    /*
+    * Збираємо id категорій, для яких уже існує budget goal.
+    *
+    * Якщо зараз редагуємо ціль, її власну категорію
+    * не виключаємо зі списку.
+    */
+    const usedCategoryIds = new Set(
+      budgetGoals
+        .filter((goal) => goal.id !== editingGoal?.id)
+        .map((goal) => goal.categoryId)
+    );
+
+    return categories.filter(
+      (category) =>
+        category.type === "expense" &&
+        !usedCategoryIds.has(category.id)
+    );
+  }, [categories, budgetGoals, editingGoal]);
+
+  const validateGoalForm = (): boolean => {
+  if (!goalCategoryId) {
+    setGoalError("Choose a category");
+    return false;
+  }
+
+  const amount = Number(goalAmount);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    setGoalError("Enter an amount greater than zero");
+    return false;
+  }
+
+  if (!goalDeadline) {
+    setGoalError("Choose a deadline");
+    return false;
+  }
+
+  const deadline = startOfDay(
+    new Date(`${goalDeadline}T00:00:00`)
+  );
+
+  const today = startOfDay(now);
+
+  if (deadline < today) {
+    setGoalError("Deadline cannot be in the past");
+    return false;
+  }
+
+  setGoalError(null);
+  return true;
+};
+
+const createGoal = async () => {
+  if (!user || !validateGoalForm()) return;
+
+  setGoalSaving(true);
+
+  try {
+    await createBudgetGoal(user.uid, {
+      categoryId: goalCategoryId,
+      limitMinor: Math.round(Number(goalAmount) * 100),
+      currency: BASE_CURRENCY,
+      startDate: now,
+      deadline: new Date(`${goalDeadline}T00:00:00`),
+    });
+
+    setGoalDialogOpen(false);
+  } catch (error) {
+    setGoalError(
+      error instanceof Error
+        ? error.message
+        : "Could not create the budget goal"
+    );
+  } finally {
+    setGoalSaving(false);
+  }
+};
+
+/**
+ * Opens the delete confirmation for the selected goal.
+ */
+const requestGoalDelete = (goal: BudgetGoal) => {
+  setGoalToDelete(goal);
+  setDeleteConfirmationOpen(true);
+};
+
+const requestGoalUpdate = () => {
+  if (!validateGoalForm()) return;
+
+  setEditConfirmationOpen(true);
+};
+
+const confirmGoalUpdate = async () => {
+  if (!user || !editingGoal) return;
+
+  setGoalSaving(true);
+
+  try {
+    await updateBudgetGoal(user.uid, editingGoal.id, {
+      categoryId: goalCategoryId,
+      limitMinor: Math.round(Number(goalAmount) * 100),
+      currency: BASE_CURRENCY,
+      startDate: now,
+      deadline: new Date(`${goalDeadline}T00:00:00`),
+    });
+
+    setEditConfirmationOpen(false);
+    setGoalDialogOpen(false);
+    setEditingGoal(null);
+  } catch (error) {
+    setGoalError(
+      error instanceof Error
+        ? error.message
+        : "Could not update the budget goal"
+    );
+  } finally {
+    setGoalSaving(false);
+  }
+};
+
+   /**
+ * Deletes the selected goal after confirmation.
+ */
+
+  const confirmGoalDelete = async () => {
+  if (!user || !goalToDelete) return;
+
+  setGoalSaving(true);
+
+  try {
+    await deleteBudgetGoal(user.uid, goalToDelete.id);
+
+    setDeleteConfirmationOpen(false);
+    setGoalToDelete(null);
+  } catch (error) {
+    setGoalError(
+      error instanceof Error
+        ? error.message
+        : "Could not delete the budget goal"
+    );
+  } finally {
+    setGoalSaving(false);
+  }
+};
+
+    const loading =
+      walletsLoading ||
+      txLoading ||
+      ratesLoading ||
+      budgetGoalsLoading;
 
   if (loading) {
     return (
@@ -192,6 +544,7 @@ export default function DashboardPage() {
       </div>
     );
   }
+
 
   const categoryOf = (id?: string) => categories.find((c) => c.id === id);
   const walletName = (id: string) => wallets.find((w) => w.id === id)?.name;
@@ -260,104 +613,391 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Budget Goals</CardTitle>
-        </CardHeader>
-
-        <CardContent>
-          Budget goals will be here
-        </CardContent>
-      </Card> */}
-            {/* Budget goals — блок на всю ширину сторінки */}
+            {/* Budget goals */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Budget goals</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Track spending limits for selected categories
-          </p>
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-base">
+              Budget goals
+            </CardTitle>
+
+            <p className="text-sm text-muted-foreground">
+              Track spending limits for selected categories
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={openCreateGoalDialog}
+          >
+            <Plus className="size-4" />
+            Add goal
+          </Button>
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {/* Тимчасові дані для перевірки дизайну */}
-          {[
-            {
-              name: "Food",
-              spentMinor: 600000,
-              limitMinor: 1000000,
-              color: "#3b82f6",
-            },
-            {
-              name: "Transport",
-              spentMinor: 400000,
-              limitMinor: 1000000,
-              color: "#22c55e",
-            },
-          ].map((goal) => {
-            // Відсоток використаного бюджету
-            const percentage = Math.min(
-              (goal.spentMinor / goal.limitMinor) * 100,
-              100
-            );
+          {budgetGoals.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No budget goals yet
+            </p>
+          ) : (
+            budgetGoals.map((goal) => {
+              const category = categories.find(
+                (item) => item.id === goal.categoryId
+              );
 
-            // Скільки грошей залишилося
-            const remainingMinor = Math.max(
-              goal.limitMinor - goal.spentMinor,
-              0
-            );
+              if (!category) return null;
 
-            return (
-              <div key={goal.name} className="space-y-2">
-                {/* Назва категорії та відсоток */}
-                <div className="flex items-center justify-between">
-                  <p className="font-medium">{goal.name}</p>
+              const cycle = getCurrentGoalCycle(goal, now);
+              const cycleEndExclusive = addDays(cycle.cycleEnd, 1);
 
-                  <p className="text-sm text-muted-foreground">
-                    {Math.round(percentage)}%
-                  </p>
-                </div>
+              const spentMinor = transactions
+                .filter((tx) => {
+                  if (
+                    tx.type !== "expense" ||
+                    tx.categoryId !== goal.categoryId
+                  ) {
+                    return false;
+                  }
 
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  {/* Фон progress bar */}
-                  <div className="relative h-10 flex-1 overflow-hidden rounded-full bg-muted">
-                    {/* Заповнена частина progress bar */}
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${percentage}%`,
-                        backgroundColor: goal.color,
-                      }}
-                    />
+                  const transactionDate = tx.date.toDate();
 
-                    {/* Витрачено */}
-                    <span className="absolute inset-y-0 left-4 flex items-center text-sm font-medium">
-                      {formatMoney(goal.spentMinor, BASE_CURRENCY)}
-                    </span>
+                  return (
+                    transactionDate >= cycle.cycleStart &&
+                    transactionDate < cycleEndExclusive
+                  );
+                })
+                .reduce(
+                  (sum, tx) =>
+                    sum + toBase(tx.amountMinor, tx.currency),
+                  0
+                );
 
-                    {/* Залишилося */}
-                    <span className="absolute inset-y-0 right-4 flex items-center text-sm font-medium">
-                      {formatMoney(remainingMinor, BASE_CURRENCY)}
-                    </span>
+              const percentage = Math.min(
+                (spentMinor / goal.limitMinor) * 100,
+                100
+              );
+
+              const remainingMinor = Math.max(
+                goal.limitMinor - spentMinor,
+                0
+              );
+
+              return (
+                <div key={goal.id} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="size-2.5 rounded-full"
+                        style={{
+                          backgroundColor: category.color,
+                        }}
+                      />
+
+                      <p className="font-medium">
+                        {category.name}
+                      </p>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                      {Math.round(percentage)}%
+                    </p>
                   </div>
 
-                  {/* Текст праворуч від progress bar */}
-                  <p className="text-sm text-muted-foreground sm:w-44">
-                    час
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative h-10 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${percentage}%`,
+                          backgroundColor: category.color,
+                        }}
+                      />
 
-          {/* Кнопка для майбутнього додавання нової категорії */}
-          <button
-            type="button"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            + Add category
-          </button>
+                      <span className="absolute inset-y-0 left-4 flex items-center text-sm font-medium">
+                        {formatMoney(spentMinor, BASE_CURRENCY)} spent
+                      </span>
+
+                      <span className="absolute inset-y-0 right-4 flex items-center text-sm font-medium">
+                        {formatMoney(remainingMinor, BASE_CURRENCY)} left
+                      </span>
+                    </div>
+
+                    <div className="sm:w-44">
+                      <p
+                        className={cn(
+                          "text-sm",
+                          cycle.isLastDay
+                            ? "font-medium text-destructive"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        {cycle.isLastDay
+                          ? "Last day"
+                          : `${cycle.daysLeft} day${
+                              cycle.daysLeft === 1 ? "" : "s"
+                            } left`}
+                      </p>
+
+                      <p className="text-xs text-muted-foreground">
+                        Ends {format(cycle.cycleEnd, "d MMM yyyy")}
+                      </p>
+                    </div>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Actions for ${category.name}`}
+                        >
+                          <MoreVertical className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            openEditGoalDialog(goal)
+                          }
+                        >
+                          Edit goal
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() =>
+                            requestGoalDelete(goal)
+                          }
+                        >
+                          Delete goal
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </CardContent>
       </Card>
+
+
+      <Dialog
+  open={goalDialogOpen}
+  onOpenChange={(open) => {
+    if (!goalSaving) {
+      setGoalDialogOpen(open);
+    }
+  }}
+>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>
+        {editingGoal
+          ? "Edit budget goal"
+          : "Add budget goal"}
+      </DialogTitle>
+
+      <DialogDescription>
+        Choose an expense category, spending limit and deadline.
+      </DialogDescription>
+    </DialogHeader>
+
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="goal-category">
+          Category
+        </Label>
+
+        <Select
+          value={goalCategoryId}
+          onValueChange={setGoalCategoryId}
+        >
+          <SelectTrigger
+            id="goal-category"
+            className="w-full"
+          >
+            <SelectValue placeholder="Choose a category" />
+          </SelectTrigger>
+
+          <SelectContent>
+            {availableGoalCategories.map((category) => (
+              <SelectItem
+                key={category.id}
+                value={category.id}
+              >
+                <span
+                  className="size-2.5 rounded-full"
+                  style={{
+                    backgroundColor: category.color,
+                  }}
+                />
+
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="goal-amount">
+          Budget amount, UAH
+        </Label>
+
+        <Input
+          id="goal-amount"
+          type="number"
+          min="0.01"
+          step="0.01"
+          value={goalAmount}
+          onChange={(event) =>
+            setGoalAmount(event.target.value)
+          }
+          placeholder="5000"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="goal-deadline">
+          Deadline
+        </Label>
+
+        <Input
+          id="goal-deadline"
+          type="date"
+          min={format(now, "yyyy-MM-dd")}
+          value={goalDeadline}
+          onChange={(event) =>
+            setGoalDeadline(event.target.value)
+          }
+        />
+      </div>
+
+      {goalError && (
+        <p className="text-sm text-destructive">
+          {goalError}
+        </p>
+      )}
+    </div>
+
+    <DialogFooter>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={goalSaving}
+        onClick={() => setGoalDialogOpen(false)}
+      >
+        Cancel
+      </Button>
+
+      <Button
+        type="button"
+        disabled={goalSaving}
+        onClick={
+          editingGoal
+            ? requestGoalUpdate
+            : createGoal
+        }
+      >
+        {goalSaving
+          ? "Saving..."
+          : editingGoal
+            ? "Review changes"
+            : "Create goal"}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
+      <AlertDialog
+  open={editConfirmationOpen}
+  onOpenChange={setEditConfirmationOpen}
+>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>
+        Change this budget goal?
+      </AlertDialogTitle>
+
+      <AlertDialogDescription>
+        The current cycle will end. A new repeating cycle
+        will start today with the selected category,
+        amount and deadline.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+
+    <AlertDialogFooter>
+      <AlertDialogCancel disabled={goalSaving}>
+        Cancel
+      </AlertDialogCancel>
+
+      <AlertDialogAction
+        disabled={goalSaving}
+        onClick={(event) => {
+          event.preventDefault();
+          void confirmGoalUpdate();
+        }}
+      >
+        {goalSaving
+          ? "Saving..."
+          : "Confirm changes"}
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
+
+            {/* Confirmation before deleting a budget goal */}
+      <AlertDialog
+        open={deleteConfirmationOpen}
+        onOpenChange={(open) => {
+          // Не дозволяємо закрити вікно під час видалення.
+          if (goalSaving) return;
+
+          setDeleteConfirmationOpen(open);
+
+          // Якщо користувач натиснув Cancel або закрив вікно,
+          // більше не зберігаємо вибрану для видалення ціль.
+          if (!open) {
+            setGoalToDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete this budget goal?
+            </AlertDialogTitle>
+
+            <AlertDialogDescription>
+              This will permanently remove the budget goal.
+              The category and its transactions will not be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={goalSaving}>
+              Cancel
+            </AlertDialogCancel>
+
+            <AlertDialogAction
+              disabled={goalSaving}
+              onClick={(event) => {
+                // Не закриваємо AlertDialog раніше,
+                // ніж завершиться запит до Firestore.
+                event.preventDefault();
+                void confirmGoalDelete();
+              }}
+            >
+              {goalSaving ? "Deleting..." : "Delete goal"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
