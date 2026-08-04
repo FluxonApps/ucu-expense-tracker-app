@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import type { CurrencyCode } from "@/lib/types";
 
 const STORAGE_KEY = "spendly-display-currency";
@@ -18,7 +19,9 @@ export function DisplayCurrencyProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY) as CurrencyCode | null;
-    if (stored) setDisplayCurrencyState(stored);
+    if (stored && SUPPORTED_CURRENCIES.includes(stored)) {
+      setDisplayCurrencyState(stored);
+    }
   }, []);
 
   const setDisplayCurrency = (currency: CurrencyCode) => {

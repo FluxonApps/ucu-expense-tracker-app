@@ -129,7 +129,7 @@ export default function DashboardPage() {
         .sort((a, b) => b.value - a.value);
   }, [monthTxs, categories, toBase]);
 
-  // Bars: income vs expenses per month for the last 6 months
+// Bars: income vs expenses per month for the last 6 months
   const monthlyData = useMemo(() => {
     const months: { key: string; label: string; income: number; expense: number }[] = [];
     for (let i = 5; i >= 0; i--) {
@@ -147,11 +147,15 @@ export default function DashboardPage() {
       const key = format(tx.date.toDate(), "yyyy-MM");
       const bucket = byKey.get(key);
       if (!bucket) continue;
-      const amount = Math.round(toBase(tx.amountMinor, tx.currency) / 100);
-      if (tx.type === "income") bucket.income += amount;
-      else bucket.expense += amount;
+      const amountMinor = toBase(tx.amountMinor, tx.currency);
+      if (tx.type === "income") bucket.income += amountMinor;
+      else bucket.expense += amountMinor;
     }
-    return months;
+    return months.map((m) => ({
+      ...m,
+      income: Math.round(m.income / 100),
+      expense: Math.round(m.expense / 100),
+    }));
   }, [transactions, now, toBase]);
 
   // Daily spending for the current month
@@ -166,9 +170,9 @@ export default function DashboardPage() {
     for (const tx of monthTxs) {
       if (tx.type !== "expense") continue;
       const bucket = byKey.get(format(tx.date.toDate(), "yyyy-MM-dd"));
-      if (bucket) bucket.expense += Math.round(toBase(tx.amountMinor, tx.currency) / 100);
+      if (bucket) bucket.expense += toBase(tx.amountMinor, tx.currency);
     }
-    return buckets;
+    return buckets.map((b) => ({ ...b, expense: Math.round(b.expense / 100) }));
   }, [monthTxs, monthStart, now, toBase]);
 
   const recentTxs = useMemo(() => transactions.slice(0, 8), [transactions]);

@@ -1,10 +1,10 @@
 "use client";
 
 import { useDisplayCurrency } from "@/components/display-currency-provider";
+import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import { cn } from "@/lib/utils";
-import type { CurrencyCode } from "@/lib/types";
 
-const OPTIONS: CurrencyCode[] = ["UAH", "USD", "EUR"];
+const OPTIONS = SUPPORTED_CURRENCIES;
 
 export function CurrencySwitcher() {
   const { displayCurrency, setDisplayCurrency } = useDisplayCurrency();
