@@ -62,7 +62,7 @@ function LoginButton({ className = "" }: { className?: string }) {
 export default function Home() {
   return (
     <main className="landing-font min-h-screen overflow-x-hidden bg-[#071629] text-white">
-      <section className="grid w-full gap-10 px-6 pb-20 pt-12 sm:px-10 sm:pt-16 lg:grid-cols-[0.85fr_1.15fr] lg:gap-12 lg:px-14 lg:pb-28">
+      <section className="grid w-full gap-8 px-6 pb-20 pt-12 sm:px-10 sm:pt-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-6 lg:px-14 lg:pb-28">
         <div className="flex flex-col">
           <h1 className="max-w-xl text-5xl font-normal leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
             Handle numbers,
@@ -70,12 +70,13 @@ export default function Home() {
             <span className="text-[#4d9ce8]">love life</span>
           </h1>
 
-          <div className="relative mx-auto mt-10 w-full max-w-[475px] overflow-hidden rounded-[36px] bg-[#347fc3] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.18)] sm:mt-16 sm:rounded-[48px] sm:p-7 lg:mx-0">
+          <div className="relative mx-auto mt-10 w-full max-w-[600px] overflow-hidden rounded-[36px] bg-[#347fc3] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.18)] sm:mt-16 sm:rounded-[48px] sm:p-7 lg:mx-0">
             <Image
               src="/landing/transactions-preview.png"
               alt="Spendly transactions screen"
               width={820}
               height={916}
+              sizes="(min-width: 1024px) 600px, 90vw"
               className="block h-auto w-full rounded-[22px] object-cover object-top sm:rounded-[32px]"
             />
           </div>
@@ -88,6 +89,7 @@ export default function Home() {
               alt="Spendly dashboard preview"
               width={1388}
               height={732}
+              sizes="(min-width: 1024px) 58vw, 100vw"
               className="block h-auto w-full rounded-[20px] object-cover sm:rounded-[28px]"
             />
           </div>
