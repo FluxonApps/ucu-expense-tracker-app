@@ -8,6 +8,8 @@ import {
   CalendarIcon,
   MoreVertical,
   Pencil,
+  Pause,
+  Play,
   Plus,
   Trash2,
   X,
@@ -62,10 +64,24 @@ import {
   type TransactionFilters,
   type TransactionsPage,
 } from "@/lib/firestore/transactions";
-import type { Transaction, TransactionType } from "@/lib/types";
+import {
+  deleteRecurringTransaction,
+  setRecurringTransactionActive,
+  subscribeToRecurringTransactions,
+} from "@/lib/firestore/recurring-transactions";
+import type { RecurringTransaction, Transaction, TransactionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ALL = "all";
+const AUTOMATIC = "automatic";
+const ONE_TIME = "one-time";
+
+const frequencyLabel: Record<RecurringTransaction["frequency"], string> = {
+  monthly: "Monthly",
+  everyTwoMonths: "Every 2 months",
+  semiannual: "Every 6 months",
+  yearly: "Yearly",
+};
 
 function DateFilterButton({
   label,
@@ -102,10 +118,12 @@ export default function TransactionsPage() {
   const [filterWallet, setFilterWallet] = useState(ALL);
   const [filterCategory, setFilterCategory] = useState(ALL);
   const [filterType, setFilterType] = useState(ALL);
+  const [filterPayment, setFilterPayment] = useState(ALL);
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
   const [cursor, setCursor] = useState<TransactionsPage["cursor"]>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -113,6 +131,7 @@ export default function TransactionsPage() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [editingRecurringTx, setEditingRecurringTx] = useState<RecurringTransaction | null>(null);
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -146,6 +165,14 @@ export default function TransactionsPage() {
     loadFirstPage();
   }, [loadFirstPage]);
 
+  useEffect(() => {
+    if (!user) {
+      setRecurringTransactions([]);
+      return;
+    }
+    return subscribeToRecurringTransactions(user.uid, setRecurringTransactions);
+  }, [user]);
+
   const loadMore = async () => {
     if (!user || !cursor) return;
     setLoadingMore(true);
@@ -178,10 +205,33 @@ export default function TransactionsPage() {
     }
   };
 
+  const handleScheduleActive = async (schedule: RecurringTransaction) => {
+    if (!user) return;
+    try {
+      await setRecurringTransactionActive(user.uid, schedule.id, !schedule.isActive);
+      toast.success(schedule.isActive ? "Automatic payment paused" : "Automatic payment resumed");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to update the automatic payment");
+    }
+  };
+
+  const handleScheduleDelete = async (schedule: RecurringTransaction) => {
+    if (!user) return;
+    try {
+      await deleteRecurringTransaction(user.uid, schedule.id);
+      toast.success("Automatic payment deleted");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to delete the automatic payment");
+    }
+  };
+
   const hasActiveFilters =
     filterWallet !== ALL ||
     filterCategory !== ALL ||
     filterType !== ALL ||
+    filterPayment !== ALL ||
     dateFrom !== undefined ||
     dateTo !== undefined;
 
@@ -189,6 +239,7 @@ export default function TransactionsPage() {
     setFilterWallet(ALL);
     setFilterCategory(ALL);
     setFilterType(ALL);
+    setFilterPayment(ALL);
     setDateFrom(undefined);
     setDateTo(undefined);
   };
@@ -209,6 +260,7 @@ export default function TransactionsPage() {
         <Button
           onClick={() => {
             setEditingTx(null);
+            setEditingRecurringTx(null);
             setFormOpen(true);
           }}
         >
@@ -258,6 +310,17 @@ export default function TransactionsPage() {
           </SelectContent>
         </Select>
 
+        <Select value={filterPayment} onValueChange={setFilterPayment}>
+          <SelectTrigger size="sm" className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All payments</SelectItem>
+            <SelectItem value={ONE_TIME}>One-time</SelectItem>
+            <SelectItem value={AUTOMATIC}>Automatic</SelectItem>
+          </SelectContent>
+        </Select>
+
         <DateFilterButton label="From" value={dateFrom} onChange={setDateFrom} />
         <DateFilterButton label="To" value={dateTo} onChange={setDateTo} />
 
@@ -269,6 +332,96 @@ export default function TransactionsPage() {
         )}
       </div>
 
+      {filterPayment === AUTOMATIC ? (
+        <Card className="py-0">
+          <CardContent className="p-0">
+            {recurringTransactions.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-16 text-center">
+                <p className="font-medium">No automatic payments found</p>
+                <p className="text-sm text-muted-foreground">
+                  Create a transaction with a recurring payment frequency to schedule one.
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>Frequency</TableHead>
+                    <TableHead>Next payment</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead>Wallet</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="w-10" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recurringTransactions.map((schedule) => (
+                    <TableRow key={schedule.id} className={!schedule.isActive ? "opacity-60" : ""}>
+                      <TableCell>
+                        <Badge variant={schedule.isActive ? "secondary" : "outline"}>
+                          {schedule.isActive ? frequencyLabel[schedule.frequency] : "Paused"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                        {format(schedule.nextRunAt.toDate(), "d MMM yyyy")} · day {schedule.dayOfMonth}
+                      </TableCell>
+                      <TableCell className="max-w-48 truncate">
+                        {schedule.note || <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell>{walletName(schedule.walletId, schedule.walletName)}</TableCell>
+                      <TableCell className="text-right">
+                        <span
+                          className={cn(
+                            "font-medium tabular-nums",
+                            schedule.type === "income"
+                              ? "text-green-600 dark:text-green-500"
+                              : "text-red-600 dark:text-red-500"
+                          )}
+                        >
+                          {schedule.type === "income" ? "+" : "-"}
+                          {formatMoney(schedule.amountMinor, schedule.currency)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="size-7">
+                              <MoreVertical className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditingTx(null);
+                                setEditingRecurringTx(schedule);
+                                setFormOpen(true);
+                              }}
+                            >
+                              <Pencil className="size-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleScheduleActive(schedule)}>
+                              {schedule.isActive ? <Pause className="size-4" /> : <Play className="size-4" />}
+                              {schedule.isActive ? "Pause" : "Resume"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => handleScheduleDelete(schedule)}
+                            >
+                              <Trash2 className="size-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
       <Card className="py-0">
         <CardContent className="p-0">
           {loading ? (
@@ -299,7 +452,9 @@ export default function TransactionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactions.map((tx) => {
+                {transactions
+                  .filter((tx) => filterPayment !== ONE_TIME || !tx.isAutomatic)
+                  .map((tx) => {
                   const category = categoryOf(tx.categoryId);
                   return (
                     <TableRow key={tx.id}>
@@ -367,6 +522,7 @@ export default function TransactionsPage() {
                               disabled={tx.type === "transfer"}
                               onClick={() => {
                                 setEditingTx(tx);
+                                setEditingRecurringTx(null);
                                 setFormOpen(true);
                               }}
                             >
@@ -385,14 +541,15 @@ export default function TransactionsPage() {
                       </TableCell>
                     </TableRow>
                   );
-                })}
+                  })}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
+      )}
 
-      {hasMore && !loading && (
+      {filterPayment !== AUTOMATIC && hasMore && !loading && (
         <div className="flex justify-center">
           <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
             {loadingMore ? "Loading..." : "Load more"}
@@ -404,6 +561,7 @@ export default function TransactionsPage() {
         open={formOpen}
         onOpenChange={setFormOpen}
         transaction={editingTx}
+        recurringTransaction={editingRecurringTx}
         onSaved={loadFirstPage}
       />
 

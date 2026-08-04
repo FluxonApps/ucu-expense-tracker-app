@@ -4,6 +4,13 @@ export type CurrencyCode = "UAH" | "USD" | "EUR" | "PLN";
 
 export type TransactionType = "income" | "expense" | "transfer";
 
+/** How often an automatic income or expense is created. */
+export type PaymentFrequency =
+  | "monthly"
+  | "everyTwoMonths"
+  | "semiannual"
+  | "yearly";
+
 export interface UserProfile {
   displayName: string;
   email: string;
@@ -50,7 +57,32 @@ export interface Transaction {
   categoryId?: string;
   date: Timestamp;
   note: string;
+  /** True only for a transaction created by a recurring-payment schedule. */
+  isAutomatic?: boolean;
+  /** The schedule that generated this transaction, when applicable. */
+  recurringTransactionId?: string;
   createdAt: Timestamp;
+}
+
+/** A rule that will create future income or expense transactions. */
+export interface RecurringTransaction {
+  id: string;
+  type: "income" | "expense";
+  amountMinor: number;
+  currency: CurrencyCode;
+  walletId: string;
+  /** Kept so the schedule remains understandable if the wallet is removed. */
+  walletName?: string;
+  categoryId: string;
+  note: string;
+  frequency: PaymentFrequency;
+  /** Day in a month chosen by the user, from 1 through 31. */
+  dayOfMonth: number;
+  /** The first future occurrence that has not been generated yet. */
+  nextRunAt: Timestamp;
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 export interface CurrencyRate {
