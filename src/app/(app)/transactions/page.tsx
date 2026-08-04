@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   CalendarIcon,
+  Download,
   MoreVertical,
   Pencil,
   Plus,
@@ -32,6 +33,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -112,6 +121,7 @@ export default function TransactionsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -205,15 +215,21 @@ export default function TransactionsPage() {
             All income, expenses, and transfers
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditingTx(null);
-            setFormOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Add transaction
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Download className="size-4" />
+            Import transactions
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingTx(null);
+              setFormOpen(true);
+            }}
+          >
+            <Plus className="size-4" />
+            Add transaction
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -402,6 +418,26 @@ export default function TransactionsPage() {
         transaction={editingTx}
         onSaved={loadFirstPage}
       />
+
+      {/* Import Transactions Modal Placeholder */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Transactions</DialogTitle>
+            <DialogDescription>
+              Import transactions directly from your banking application or file.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-8 text-center text-sm text-muted-foreground border-2 border-dashed rounded-lg">
+            Import functionality will be implemented here.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={Boolean(deletingTx)}
