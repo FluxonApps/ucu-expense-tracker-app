@@ -138,7 +138,46 @@ export async function updateTransaction(
 }
 
 export async function deleteTransaction(uid: string, txId: string): Promise<void> {
-  await deleteDoc(transactionRef(uid, txId));
+  const txRef = transactionRef(uid, txId);
+
+  await runTransaction(db, async (t) => {
+    const txSnap = await t.get(txRef);
+    if (!txSnap.exists()) throw new Error("Transaction not found");
+    const tx = txSnap.data();
+
+    if (tx.type === "transfer") {
+      const { toWalletId, toAmountMinor } = tx;
+      if (!toWalletId || toAmountMinor === undefined) {
+        throw new Error("Transfer transaction is missing destination wallet info");
+      }
+
+      const fromRef = walletRef(uid, tx.walletId);
+      const toRef = walletRef(uid, toWalletId);
+      const fromSnap = await t.get(fromRef);
+      const toSnap = await t.get(toRef);
+      if (!fromSnap.exists() || !toSnap.exists()) throw new Error("Wallet not found");
+
+      // Undo the transfer: give the amount back to the sender, take the
+      // credited amount back from the recipient.
+      t.update(fromRef, {
+        balanceMinor: fromSnap.data().balanceMinor + tx.amountMinor,
+      });
+      t.update(toRef, {
+        balanceMinor: toSnap.data().balanceMinor - toAmountMinor,
+      });
+    } else {
+      const wRef = walletRef(uid, tx.walletId);
+      const walletSnap = await t.get(wRef);
+      if (!walletSnap.exists()) throw new Error("Wallet not found");
+
+      // Undo an income/expense: income added amountMinor, so subtract it
+      // back out; expense subtracted amountMinor, so add it back.
+      const delta = tx.type === "income" ? -tx.amountMinor : tx.amountMinor;
+      t.update(wRef, { balanceMinor: walletSnap.data().balanceMinor + delta });
+    }
+
+    t.delete(txRef);
+  });
 }
 
 export async function createTransfer(uid: string, input: TransferInput): Promise<void> {
