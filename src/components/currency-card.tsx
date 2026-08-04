@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { ArrowDownRight, ArrowUpRight, RefreshCw, ArrowRightLeft } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, YAxis, Tooltip } from "recharts";
-import type { CurrencyRate } from "@/lib/types";
 
-// SVG-прапори для відображення на всіх пристроях
 const FlagUSD = () => (
   <svg viewBox="0 0 640 480" className="size-4 rounded-sm shrink-0 inline-block align-middle">
     <path fill="#bd3d44" d="M0 0h640v480H0z"/>
@@ -43,32 +41,6 @@ const CURRENCY_FLAGS: Record<string, React.ReactNode> = {
   PLN: <FlagPLN />,
 };
 
-// Базова історія
-const BASE_HISTORY: Record<string, { day: string; buyRatio: number; sellRatio: number }[]> = {
-  USD: [
-    { day: "31 Jul", buyRatio: 0.994, sellRatio: 0.995 },
-    { day: "1 Aug", buyRatio: 0.996, sellRatio: 0.997 },
-    { day: "2 Aug", buyRatio: 0.998, sellRatio: 0.998 },
-    { day: "3 Aug", buyRatio: 0.995, sellRatio: 0.996 },
-    { day: "4 Aug", buyRatio: 1.000, sellRatio: 1.000 },
-  ],
-  EUR: [
-    { day: "31 Jul", buyRatio: 0.988, sellRatio: 0.990 },
-    { day: "1 Aug", buyRatio: 0.992, sellRatio: 0.993 },
-    { day: "2 Aug", buyRatio: 0.995, sellRatio: 0.996 },
-    { day: "3 Aug", buyRatio: 0.991, sellRatio: 0.992 },
-    { day: "4 Aug", buyRatio: 1.000, sellRatio: 1.000 },
-  ],
-  PLN: [
-    { day: "31 Jul", buyRatio: 0.982, sellRatio: 0.985 },
-    { day: "1 Aug", buyRatio: 0.987, sellRatio: 0.990 },
-    { day: "2 Aug", buyRatio: 0.992, sellRatio: 0.994 },
-    { day: "3 Aug", buyRatio: 0.989, sellRatio: 0.991 },
-    { day: "4 Aug", buyRatio: 1.000, sellRatio: 1.000 },
-  ],
-};
-
-// Кастомне підказне віконце (Tooltip) при наведенні курсора
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
@@ -93,7 +65,7 @@ const CustomTooltip = ({ active, payload }: any) => {
 
 export function CurrencyCard() {
   const [selectedCurrency, setSelectedCurrency] = useState<"USD" | "EUR" | "PLN">("USD");
-  const [realRates, setRealRates] = useState<Record<string, CurrencyRate>>({});
+  const [historyData, setHistoryData] = useState<Record<string, { day: string; buy: number; sell: number }[]>>({});
   const [loading, setLoading] = useState(true);
 
   const [amount, setAmount] = useState<string>("100");
@@ -104,17 +76,11 @@ export function CurrencyCard() {
       try {
         const res = await fetch("/api/currency");
         const data = await res.json();
-        if (data.rates) {
-          const mapped: Record<string, CurrencyRate> = {};
-          data.rates.forEach((r: CurrencyRate) => {
-            if (r.to === "UAH") {
-              mapped[r.from] = r;
-            }
-          });
-          setRealRates(mapped);
+        if (data.history) {
+          setHistoryData(data.history);
         }
       } catch (err) {
-        console.error("Failed to load currency", err);
+        console.error("Failed to load currency history", err);
       } finally {
         setLoading(false);
       }
@@ -122,45 +88,27 @@ export function CurrencyCard() {
     fetchRates();
   }, []);
 
-  const currentRealRate = realRates[selectedCurrency];
+  const chartData = historyData[selectedCurrency] || [];
+  const latestRate = chartData[chartData.length - 1];
+  const firstRate = chartData[0];
 
-  const fallbackRates: Record<string, { buy: number; sell: number }> = {
-    USD: { buy: 41.25, sell: 41.65 },
-    EUR: { buy: 44.95, sell: 45.45 },
-    PLN: { buy: 10.35, sell: 10.60 },
-  };
+  const currentBuy = latestRate?.buy ?? 0;
+  const currentSell = latestRate?.sell ?? 0;
 
-  const currentBuy = currentRealRate?.rateBuy ?? fallbackRates[selectedCurrency].buy;
-  const currentSell = currentRealRate?.rateSell ?? fallbackRates[selectedCurrency].sell;
-
-  const chartData = useMemo(() => {
-    const base = BASE_HISTORY[selectedCurrency];
-    return base.map((item) => ({
-      day: item.day,
-      buy: Number((currentBuy * item.buyRatio).toFixed(2)),
-      sell: Number((currentSell * item.sellRatio).toFixed(2)),
-    }));
-  }, [selectedCurrency, currentBuy, currentSell]);
-
-  const firstBuy = chartData[0].buy;
+  const firstBuy = firstRate?.buy ?? currentBuy;
   const buyDiff = currentBuy - firstBuy;
-  const buyPercent = ((buyDiff / firstBuy) * 100).toFixed(2);
+  const buyPercent = firstBuy ? ((buyDiff / firstBuy) * 100).toFixed(2) : "0.00";
   const isBuyUp = buyDiff >= 0;
 
   const parsedAmount = parseFloat(amount) || 0;
   const rateToUse = convertDirection === "TO_UAH" ? currentBuy : currentSell;
 
-  const convertedValue = useMemo(() => {
-    if (convertDirection === "TO_UAH") {
-      return (parsedAmount * rateToUse).toLocaleString("uk-UA", {
-        maximumFractionDigits: 2,
-      });
-    } else {
-      return (parsedAmount / rateToUse).toLocaleString("uk-UA", {
-        maximumFractionDigits: 2,
-      });
-    }
-  }, [parsedAmount, rateToUse, convertDirection]);
+  const convertedValue = rateToUse
+    ? (convertDirection === "TO_UAH"
+        ? parsedAmount * rateToUse
+        : parsedAmount / rateToUse
+      ).toLocaleString("uk-UA", { maximumFractionDigits: 2 })
+    : "0";
 
   const toggleDirection = () => {
     setConvertDirection((prev) => (prev === "TO_UAH" ? "FROM_UAH" : "TO_UAH"));
@@ -178,7 +126,7 @@ export function CurrencyCard() {
           </CardTitle>
           <p className="text-xs text-neutral-400 flex items-center gap-1 mt-0.5">
             <RefreshCw className="size-3 text-neutral-500 animate-spin-slow" />
-            Monobank API (UAH)
+            NBU API (UAH)
           </p>
         </div>
 
@@ -198,7 +146,6 @@ export function CurrencyCard() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Курси та Sparkline-Графік з Tooltip */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center rounded-xl bg-neutral-800/40 p-3.5 border border-neutral-800/80">
           <div className="space-y-1">
             <span className="text-xs font-medium text-neutral-400">Купівля / Продаж</span>
@@ -229,31 +176,33 @@ export function CurrencyCard() {
           </div>
 
           <div className="h-14 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                <defs>
-                  <linearGradient id="currencyTrend" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={isBuyUp ? "#34d399" : "#f87171"} stopOpacity={0.4} />
-                    <stop offset="95%" stopColor={isBuyUp ? "#34d399" : "#f87171"} stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <YAxis domain={["dataMin - 0.05", "dataMax + 0.05"]} hide />
-                {/* Інтерактивна підказка при наведенні мишкою */}
-                <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#525252", strokeWidth: 1, strokeDasharray: "2 2" }} />
-                <Area
-                  type="monotone"
-                  dataKey="buy"
-                  stroke={isBuyUp ? "#34d399" : "#f87171"}
-                  strokeWidth={2}
-                  fill="url(#currencyTrend)"
-                  activeDot={{ r: 4, fill: isBuyUp ? "#34d399" : "#f87171", stroke: "#171717", strokeWidth: 2 }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <Skeleton className="h-full w-full bg-neutral-800" />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="currencyTrend" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={isBuyUp ? "#34d399" : "#f87171"} stopOpacity={0.4} />
+                      <stop offset="95%" stopColor={isBuyUp ? "#34d399" : "#f87171"} stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <YAxis domain={["dataMin - 0.05", "dataMax + 0.05"]} hide />
+                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#525252", strokeWidth: 1, strokeDasharray: "2 2" }} />
+                  <Area
+                    type="monotone"
+                    dataKey="buy"
+                    stroke={isBuyUp ? "#34d399" : "#f87171"}
+                    strokeWidth={2}
+                    fill="url(#currencyTrend)"
+                    activeDot={{ r: 4, fill: isBuyUp ? "#34d399" : "#f87171", stroke: "#171717", strokeWidth: 2 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
-        {/* Швидкий калькулятор */}
         <div className="rounded-xl bg-neutral-800/30 p-3 border border-neutral-800/60 space-y-2">
           <div className="flex items-center justify-between text-xs text-neutral-400">
             <span className="font-medium">Швидка конвертація</span>
