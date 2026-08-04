@@ -134,6 +134,17 @@ export function TransactionFormDialog({
       toast.error("Please choose a wallet");
       return;
     }
+    const isEditingSameWallet =
+      isEdit && transaction && transaction.walletId === walletId && transaction.type !== "transfer";
+    const effectiveBalance =
+      isEditingSameWallet && transaction.type !== "income"
+        ? fromWallet!.balanceMinor + transaction.amountMinor
+        : fromWallet?.balanceMinor ?? 0;
+
+    if (type !== "income" && fromWallet && amountMinor > effectiveBalance) {
+      toast.error("Insufficient funds in this wallet");
+      return;
+    }
 
     if (type === "transfer") {
       if (!toWalletId) {
