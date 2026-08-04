@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createTransaction } from "@/lib/firestore/transactions";
+import { AlertCircle } from "lucide-react";
 
 interface ImportTransactionsDialogProps {
   open: boolean;
@@ -68,6 +69,14 @@ export function ImportTransactionsDialog({
 
       if (lines.length <= 1) {
         toast.error("The selected file contains no transaction rows.");
+        setIsImporting(false);
+        return;
+      }
+
+      // VALIDATION: Check if the header row contains a Date/Дата column
+      const headerLine = lines[0].toLowerCase();
+      if (!headerLine.includes("дата") && !headerLine.includes("date")) {
+        toast.error("Invalid format: The first column must contain the 'Date' or 'Дата' field.");
         setIsImporting(false);
         return;
       }
@@ -123,9 +132,7 @@ export function ImportTransactionsDialog({
 
         const isIncome = amount > 0;
 
-        // Match MCC code using our separate file mapping
         let matchedCategoryName = MCC_CATEGORY_MAP[mccCode];
-
         if (!matchedCategoryName && isIncome) {
           matchedCategoryName = "Other Income";
         }
@@ -146,7 +153,7 @@ export function ImportTransactionsDialog({
       }
 
       if (transactionsToAdd.length === 0) {
-        toast.error("Could not parse any valid transactions from this file.");
+        toast.error("Could not parse any valid transactions. Check if columns match the expected bank format.");
         setIsImporting(false);
         return;
       }
@@ -163,7 +170,7 @@ export function ImportTransactionsDialog({
       setSelectedWalletId("");
     } catch (error) {
       console.error("Import error:", error);
-      toast.error("Failed to parse or save the file.");
+      toast.error("Failed to parse or save the file due to an invalid structure.");
     } finally {
       setIsImporting(false);
     }
@@ -175,11 +182,20 @@ export function ImportTransactionsDialog({
         <DialogHeader>
           <DialogTitle>Import Transactions</DialogTitle>
           <DialogDescription>
-            Upload a statement file from your bank to automatically add transactions.
+            Upload a statement file from your banking application to automatically add transactions.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-2">
+          {/* Informational Guidance Box */}
+          <div className="flex gap-3 rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
+            <AlertCircle className="size-4 shrink-0 text-primary mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">Expected CSV Structure:</p>
+              <p>The file must contain standard columns starting with <strong>Date/Дата</strong> in the first column, followed by details, MCC code, and amount.</p>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="wallet">Select Wallet</Label>
             <Select value={selectedWalletId} onValueChange={setSelectedWalletId}>
