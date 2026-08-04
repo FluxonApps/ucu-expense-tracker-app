@@ -9,34 +9,44 @@ function MoneyBagMark() {
       fill="none"
       viewBox="0 0 128 128"
     >
+      <path d="M43 23c4 9 12 14 21 14s17-5 21-14" stroke="currentColor" strokeLinecap="round" strokeWidth="8" />
+      <path d="M48 40h32" stroke="currentColor" strokeLinecap="round" strokeWidth="8" />
       <path
-        d="M45 27c6 5 12 8 19 8s13-3 19-8"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="8"
-      />
-      <path
-        d="M43 43c-7 7-11 17-11 30 0 27 12 38 32 38s32-11 32-38c0-13-4-23-11-30"
+        d="M46 41c-10 10-14 22-14 37 0 24 12 34 32 34s32-10 32-34c0-15-4-27-14-37"
         stroke="currentColor"
         strokeLinejoin="round"
         strokeWidth="8"
       />
-      <path
-        d="M51 43h26"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="8"
-      />
-      <path
-        d="M58 59c2-3 5-4 9-4 6 0 11 4 11 10 0 7-6 9-12 11-5 2-9 4-9 10 0 6 5 10 12 10 4 0 8-1 11-5M67 49v55"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="7"
-      />
+      <text
+        x="64"
+        y="94"
+        fill="currentColor"
+        fontFamily="Arial, sans-serif"
+        fontSize="52"
+        fontWeight="700"
+        textAnchor="middle"
+      >
+        $
+      </text>
     </svg>
   );
 }
+
+// EDIT REVIEWS HERE: change `name` and `review`, or add another object to show a new card.
+const testimonials = [
+  {
+    name: "Sofia K.",
+    review: "Spendly made it easy to see where my money goes without making budgeting feel like work.",
+  },
+  {
+    name: "Andrii M.",
+    review: "I finally keep all of my cards and currencies in one clear place. Simple and genuinely useful.",
+  },
+  {
+    name: "Olena P.",
+    review: "The dashboard gives me the full picture in seconds. It is the first tracker I actually use daily.",
+  },
+];
 
 function LoginButton({ className = "" }: { className?: string }) {
   return (
@@ -52,12 +62,7 @@ function LoginButton({ className = "" }: { className?: string }) {
 export default function Home() {
   return (
     <main className="landing-font min-h-screen overflow-x-hidden bg-[#071629] text-white">
-      <header className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-6 sm:px-10 lg:px-16">
-        <span className="text-2xl font-bold tracking-tight">Spendly</span>
-        <LoginButton className="hidden px-6 py-2.5 text-base sm:inline-flex" />
-      </header>
-
-      <section className="mx-auto grid max-w-[1600px] gap-10 px-6 pb-20 pt-5 sm:px-10 lg:grid-cols-[0.85fr_1.15fr] lg:gap-12 lg:px-16 lg:pb-28">
+      <section className="grid w-full gap-10 px-6 pb-20 pt-12 sm:px-10 sm:pt-16 lg:grid-cols-[0.85fr_1.15fr] lg:gap-12 lg:px-14 lg:pb-28">
         <div className="flex flex-col">
           <h1 className="max-w-xl text-5xl font-normal leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
             Handle numbers,
@@ -100,6 +105,27 @@ export default function Home() {
               <MoneyBagMark />
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="w-full px-6 pb-20 sm:px-10 lg:px-14 lg:pb-28" aria-labelledby="testimonials-title">
+        <h2 id="testimonials-title" className="text-3xl font-normal tracking-tight sm:text-4xl">
+          What people say about <span className="text-[#4d9ce8]">Spendly</span>
+        </h2>
+        <div className="mt-8 grid gap-5 md:grid-cols-3">
+          {testimonials.map((testimonial) => (
+            <figure
+              key={testimonial.name}
+              className="flex min-h-52 flex-col justify-between rounded-[28px] border border-[#347fc3]/70 bg-[#0b1c30] p-7 shadow-[0_16px_34px_rgba(0,0,0,0.16)]"
+            >
+              <blockquote className="text-xl leading-relaxed text-white/90">
+                “{testimonial.review}”
+              </blockquote>
+              <figcaption className="mt-7 text-lg font-bold text-[#4d9ce8]">
+                {testimonial.name}
+              </figcaption>
+            </figure>
+          ))}
         </div>
       </section>
     </main>
