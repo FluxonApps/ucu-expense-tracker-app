@@ -232,21 +232,6 @@ export default function TransactionsPage() {
             Add transaction
           </Button>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
-            <Download className="size-4" />
-            Import transactions
-          </Button>
-          <Button
-            onClick={() => {
-              setEditingTx(null);
-              setFormOpen(true);
-            }}
-          >
-            <Plus className="size-4" />
-            Add transaction
-          </Button>
-        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
