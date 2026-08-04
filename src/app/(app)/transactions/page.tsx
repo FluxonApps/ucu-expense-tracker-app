@@ -232,6 +232,21 @@ export default function TransactionsPage() {
             Add transaction
           </Button>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Download className="size-4" />
+            Import transactions
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingTx(null);
+              setFormOpen(true);
+            }}
+          >
+            <Plus className="size-4" />
+            Add transaction
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -426,6 +441,27 @@ export default function TransactionsPage() {
         onOpenChange={setImportDialogOpen}
         onSuccess={loadFirstPage}
       />
+
+      {/* Import Transactions Modal Placeholder */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Transactions</DialogTitle>
+            <DialogDescription>
+              Import transactions directly from your banking application or file.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-8 text-center text-sm text-muted-foreground border-2 border-dashed rounded-lg">
+            Import functionality will be implemented here.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog
         open={Boolean(deletingTx)}
         onOpenChange={(open) => !open && setDeletingTx(null)}
