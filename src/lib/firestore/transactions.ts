@@ -51,6 +51,12 @@ export interface TransactionFilters {
 
 export const TRANSACTIONS_PAGE_SIZE = 20;
 
+function endOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
 export async function createTransaction(
   uid: string,
   input: TransactionInput
@@ -190,7 +196,7 @@ function buildConstraints(filters: TransactionFilters): QueryConstraint[] {
     constraints.push(where("date", ">=", Timestamp.fromDate(filters.dateFrom)));
   }
   if (filters.dateTo) {
-    constraints.push(where("date", "<", Timestamp.fromDate(filters.dateTo)));
+    constraints.push(where("date", "<=", Timestamp.fromDate(endOfDay(filters.dateTo))));
   }
   constraints.push(orderBy("date", "desc"));
   return constraints;
@@ -224,7 +230,7 @@ export function subscribeToTransactionsInRange(
   const q = query(
     transactionsRef(uid),
     where("date", ">=", Timestamp.fromDate(from)),
-    where("date", "<=", Timestamp.fromDate(to)),
+    where("date", "<=", Timestamp.fromDate(endOfDay(to))),
     orderBy("date", "desc")
   );
   return onSnapshot(q, (snapshot) => {
