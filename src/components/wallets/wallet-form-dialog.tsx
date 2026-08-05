@@ -27,6 +27,11 @@ import { createWallet, updateWallet } from "@/lib/firestore/wallets";
 import type { CurrencyCode, Wallet, WalletType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+/** Minor units (cents/kopiykas) -> plain decimal string for an input default value. */
+function minorToInputString(minor: number): string {
+  return (minor / 100).toFixed(2);
+}
+
 interface WalletFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -54,8 +59,10 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
       setCurrency(wallet?.currency ?? "UAH");
       setInitialBalance("");
       setWalletType(wallet?.walletType ?? "standard");
-      setCreditLimit("");
-      setCreditDueDay("");
+      setCreditLimit(
+        wallet?.creditLimitMinor !== undefined ? minorToInputString(wallet.creditLimitMinor) : ""
+      );
+      setCreditDueDay(wallet?.creditDueDay !== undefined ? String(wallet.creditDueDay) : "");
       setIcon(wallet?.icon ?? WALLET_ICONS[0]);
       setColor(wallet?.color ?? WALLET_COLORS[0]);
     }
@@ -68,6 +75,7 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
     let initialBalanceMinor = 0;
     let creditLimitMinor: number | undefined;
     let creditDueDayNum: number | undefined;
+    let newBalanceMinor: number | undefined;
 
     if (!isEdit) {
       if (initialBalance.trim()) {
@@ -96,10 +104,42 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
       }
     }
 
+    if (isEdit && wallet?.walletType === "credit") {
+      const parsedLimit = parseAmountToMinor(creditLimit);
+      if (parsedLimit === null || parsedLimit <= 0) {
+        toast.error("Credit limit must be a valid positive number");
+        return;
+      }
+      creditLimitMinor = parsedLimit;
+
+      const dueDay = Number(creditDueDay);
+      if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+        toast.error("Top-up deadline must be a day between 1 and 31");
+        return;
+      }
+      creditDueDayNum = dueDay;
+
+      // Changing the limit shouldn't change what you already owe - shift the
+      // available balance by the same delta as the limit change.
+      const limitDelta = creditLimitMinor - (wallet.creditLimitMinor ?? 0);
+      newBalanceMinor = wallet.balanceMinor + limitDelta;
+    }
+
     setSubmitting(true);
     try {
       if (isEdit && wallet) {
-        await updateWallet(user.uid, wallet.id, { name: name.trim(), icon, color });
+        await updateWallet(user.uid, wallet.id, {
+          name: name.trim(),
+          icon,
+          color,
+          ...(wallet.walletType === "credit"
+            ? {
+                creditLimitMinor,
+                creditDueDay: creditDueDayNum,
+                balanceMinor: newBalanceMinor,
+              }
+            : {}),
+        });
         toast.success("Wallet updated");
       } else {
         await createWallet(user.uid, {
@@ -130,7 +170,9 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
           <DialogTitle>{isEdit ? "Edit wallet" : "New wallet"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Update the wallet name and appearance."
+              ? wallet?.walletType === "credit"
+                ? "Update the wallet name, appearance, and credit settings."
+                : "Update the wallet name and appearance."
               : "Add a wallet to track its balance and transactions."}
           </DialogDescription>
         </DialogHeader>
@@ -145,9 +187,44 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
             />
           </div>
 
+          {isEdit && wallet?.walletType === "credit" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="wallet-edit-credit-limit">Credit limit</Label>
+                <Input
+                  id="wallet-edit-credit-limit"
+                  placeholder="0.00"
+                  inputMode="decimal"
+                  value={creditLimit}
+                  onChange={(e) => setCreditLimit(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Changing this keeps what you currently owe the same.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="wallet-edit-credit-due-day">Top-up deadline</Label>
+                <Input
+                  id="wallet-edit-credit-due-day"
+                  type="number"
+                  min={1}
+                  max={31}
+                  placeholder="e.g. 15"
+                  value={creditDueDay}
+                  onChange={(e) => setCreditDueDay(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
           {!isEdit && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div
+                className={cn(
+                  "grid gap-3",
+                  walletType === "credit" ? "grid-cols-1" : "grid-cols-2"
+                )}
+              >
                 <div className="space-y-1.5">
                   <Label>Currency</Label>
                   <Select
@@ -166,16 +243,18 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="wallet-balance">Starting balance</Label>
-                  <Input
-                    id="wallet-balance"
-                    placeholder="0.00"
-                    inputMode="decimal"
-                    value={initialBalance}
-                    onChange={(e) => setInitialBalance(e.target.value)}
-                  />
-                </div>
+                {walletType !== "credit" && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="wallet-balance">Starting balance</Label>
+                    <Input
+                      id="wallet-balance"
+                      placeholder="0.00"
+                      inputMode="decimal"
+                      value={initialBalance}
+                      onChange={(e) => setInitialBalance(e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -205,6 +284,9 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
                       value={creditLimit}
                       onChange={(e) => setCreditLimit(e.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Also sets your starting available credit.
+                    </p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="wallet-credit-due-day">Top-up deadline</Label>

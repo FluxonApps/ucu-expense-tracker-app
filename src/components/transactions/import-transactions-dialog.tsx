@@ -289,6 +289,11 @@ export function ImportTransactionsDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="monobank">Monobank</SelectItem>
+                <SelectItem value="privatbank" disabled>PrivatBank (Coming Soon)</SelectItem>
+                <SelectItem value="pumb" disabled>PUMB (Coming Soon)</SelectItem>
+                <SelectItem value="sense" disabled>Sense Bank (Coming Soon)</SelectItem>
+                <SelectItem value="abank" disabled>A-Bank (Coming Soon)</SelectItem>
+                <SelectItem value="ukrsibbank" disabled>UKRSIBBANK (Coming Soon)</SelectItem>
               </SelectContent>
             </Select>
           </div>

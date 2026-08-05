@@ -1,5 +1,6 @@
 "use client";
 
+import { format as formatDate } from "date-fns";
 import { MoreVertical, Pencil, Plus, Trash2, Wallet as WalletIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -29,6 +30,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatMoney } from "@/lib/currencies";
 import { deleteWallet } from "@/lib/firestore/wallets";
 import type { Wallet } from "@/lib/types";
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+/** Next occurrence of `dueDay`, clamped to shorter months (e.g. day 31 in Feb). */
+function getNextDueDate(dueDay: number, from = new Date()): Date {
+  const clampedThisMonth = Math.min(dueDay, daysInMonth(from.getFullYear(), from.getMonth()));
+  const thisMonthDue = new Date(from.getFullYear(), from.getMonth(), clampedThisMonth);
+  if (thisMonthDue >= from) return thisMonthDue;
+
+  const nextMonth = from.getMonth() + 1;
+  const clampedNextMonth = Math.min(dueDay, daysInMonth(from.getFullYear(), nextMonth));
+  return new Date(from.getFullYear(), nextMonth, clampedNextMonth);
+}
 
 export default function WalletsPage() {
   const { user } = useAuth();
@@ -106,7 +122,10 @@ export default function WalletsPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {wallets.map((wallet) => (
-            <Card key={wallet.id} className="relative overflow-hidden bg-white text-neutral-900">
+            <Card
+              key={wallet.id}
+              className="relative overflow-hidden bg-white text-neutral-900"
+            >
               <div
                 className="absolute inset-y-0 left-0 w-1.5"
                 style={{ backgroundColor: wallet.color }}
@@ -120,11 +139,28 @@ export default function WalletsPage() {
                     <AppIcon name={wallet.icon} className="size-5" />
                   </div>
                   <div>
-                    <p className="font-medium">{wallet.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-medium">{wallet.name}</p>
+                      {wallet.walletType === "credit" && (
+                        <span className="inline-flex items-center rounded-full border border-neutral-300 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500">
+                          Credit
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">{wallet.currency}</p>
                     <p className="mt-2 text-xl font-semibold tabular-nums">
                       {formatMoney(wallet.balanceMinor, wallet.currency)}
                     </p>
+                    {wallet.walletType === "credit" && wallet.creditDueDay && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        You owe{" "}
+                        {formatMoney(
+                          Math.max(0, (wallet.creditLimitMinor ?? 0) - wallet.balanceMinor),
+                          wallet.currency
+                        )}{" "}
+                        till {formatDate(getNextDueDate(wallet.creditDueDay), "d MMMM")}.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <DropdownMenu>
