@@ -1,6 +1,7 @@
 import {
   addDoc,
   deleteDoc,
+  doc,
   onSnapshot,
   orderBy,
   query,
@@ -12,7 +13,12 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { CurrencyCode, PaymentFrequency, RecurringTransaction } from "@/lib/types";
-import { recurringTransactionRef, recurringTransactionsRef } from "./refs";
+import {
+  recurringTransactionRef,
+  recurringTransactionsRef,
+  transactionsRef,
+  walletRef,
+} from "./refs";
 
 export interface RecurringTransactionInput {
   type: "income" | "expense";
@@ -78,19 +84,71 @@ export function subscribeToRecurringTransactions(
 export async function createRecurringTransaction(
   uid: string,
   input: RecurringTransactionInput
-): Promise<void> {
+): Promise<boolean> {
   if (input.amountMinor <= 0) throw new Error("Transaction amount must be greater than zero");
   if (input.dayOfMonth < 1 || input.dayOfMonth > 31) throw new Error("Invalid payment day");
 
   const { startDate, ...schedule } = input;
-  await addDoc(recurringTransactionsRef(uid), {
-    id: "",
-    ...schedule,
-    nextRunAt: Timestamp.fromDate(firstRunAt(startDate, input.dayOfMonth)),
-    isActive: true,
-    createdAt: serverTimestamp() as unknown as Timestamp,
-    updatedAt: serverTimestamp() as unknown as Timestamp,
+  const firstPaymentAt = firstRunAt(startDate, input.dayOfMonth);
+
+  // Future schedules only need their rule saved. If the first chosen payment
+  // is already due, create its history entry and update the balance right now
+  // instead of waiting for the next Cloud Scheduler invocation.
+  if (firstPaymentAt > new Date()) {
+    await addDoc(recurringTransactionsRef(uid), {
+      id: "",
+      ...schedule,
+      nextRunAt: Timestamp.fromDate(firstPaymentAt),
+      isActive: true,
+      createdAt: serverTimestamp() as unknown as Timestamp,
+      updatedAt: serverTimestamp() as unknown as Timestamp,
+    });
+    return false;
+  }
+
+  const scheduleRef = doc(recurringTransactionsRef(uid));
+  const paymentRef = doc(
+    transactionsRef(uid),
+    `${scheduleRef.id}_${firstPaymentAt.toISOString().slice(0, 10)}`
+  );
+  const sourceWalletRef = walletRef(uid, input.walletId);
+
+  await runTransaction(db, async (transaction) => {
+    const walletSnapshot = await transaction.get(sourceWalletRef);
+    if (!walletSnapshot.exists()) throw new Error("Wallet not found");
+
+    const wallet = walletSnapshot.data();
+    const delta = input.type === "income" ? input.amountMinor : -input.amountMinor;
+    if (wallet.balanceMinor + delta < 0) {
+      throw new Error("Insufficient balance: this expense would make the wallet negative");
+    }
+
+    transaction.set(scheduleRef, {
+      id: scheduleRef.id,
+      ...schedule,
+      nextRunAt: Timestamp.fromDate(nextRunAt(firstPaymentAt, input.frequency, input.dayOfMonth)),
+      isActive: true,
+      createdAt: serverTimestamp() as unknown as Timestamp,
+      updatedAt: serverTimestamp() as unknown as Timestamp,
+    });
+    transaction.set(paymentRef, {
+      id: paymentRef.id,
+      type: input.type,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      walletId: input.walletId,
+      walletName: wallet.name ?? input.walletName,
+      categoryId: input.categoryId,
+      date: Timestamp.fromDate(firstPaymentAt),
+      note: input.note,
+      isAutomatic: true,
+      recurringTransactionId: scheduleRef.id,
+      createdAt: serverTimestamp() as unknown as Timestamp,
+    });
+    transaction.update(sourceWalletRef, { balanceMinor: wallet.balanceMinor + delta });
   });
+
+  return true;
 }
 
 export async function updateRecurringTransaction(

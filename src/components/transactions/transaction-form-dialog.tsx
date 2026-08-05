@@ -318,8 +318,12 @@ export function TransactionFormDialog({
           await updateRecurringTransaction(user.uid, recurringTransaction.id, input);
           toast.success("Automatic payment updated");
         } else {
-          await createRecurringTransaction(user.uid, input);
-          toast.success("Automatic payment scheduled");
+          const paymentRecorded = await createRecurringTransaction(user.uid, input);
+          toast.success(
+            paymentRecorded
+              ? "Automatic payment scheduled and the due payment was recorded"
+              : "Automatic payment scheduled"
+          );
         }
         onOpenChange(false);
         onSaved?.();

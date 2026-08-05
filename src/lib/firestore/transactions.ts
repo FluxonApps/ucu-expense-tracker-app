@@ -78,30 +78,6 @@ export async function createTransaction(
       }
     }
 
-    // 2. Fallback safety check: Query existing transactions for this exact wallet, date, and note
-    // This prevents duplicates even if IDs or amounts vary slightly
-    const exactDateStart = Timestamp.fromDate(new Date(input.date.getTime() - 2000));
-    const exactDateEnd = Timestamp.fromDate(new Date(input.date.getTime() + 2000));
-
-    const q = query(
-      transactionsRef(uid),
-      where("walletId", "==", input.walletId),
-      where("date", ">=", exactDateStart),
-      where("date", "<=", exactDateEnd)
-    );
-
-    const existingSnap = await getDocs(q);
-    const isDuplicateByContent = existingSnap.docs.some((docSnap) => {
-      const data = docSnap.data();
-      const sameNote = (data.note || "").trim().toLowerCase() === (input.note || "").trim().toLowerCase();
-      const sameAmount = data.amountMinor === input.amountMinor;
-      return sameNote && sameAmount;
-    });
-
-    if (isDuplicateByContent) {
-      return; // Duplicate found by content matching! Skip creation.
-    }
-
     const walletSnap = await t.get(wRef);
     if (!walletSnap.exists()) throw new Error("Wallet not found");
     const wallet = walletSnap.data();
