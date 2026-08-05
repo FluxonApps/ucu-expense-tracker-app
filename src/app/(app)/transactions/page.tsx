@@ -22,6 +22,8 @@ import { useAuth } from "@/components/auth-provider";
 import { useData } from "@/components/data-provider";
 import { AppIcon } from "@/components/icons";
 import { TransactionFormDialog } from "@/components/transactions/transaction-form-dialog";
+import { ImportTransactionsDialog } from "@/components/transactions/import-transactions-dialog";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -716,25 +718,12 @@ export default function TransactionsPage() {
         onSaved={loadFirstPage}
       />
 
-      {/* Import Transactions Modal Placeholder */}
-      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Import Transactions</DialogTitle>
-            <DialogDescription>
-              Import transactions directly from your banking application or file.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-8 text-center text-sm text-muted-foreground border-2 border-dashed rounded-lg">
-            Import functionality will be implemented here.
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Import Transactions Modal */}
+      <ImportTransactionsDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onSuccess={loadFirstPage}
+      />
 
       <AlertDialog
         open={Boolean(deletingTx)}
