@@ -12,7 +12,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { CurrencyCode, Wallet } from "@/lib/types";
+import type { CurrencyCode, Wallet, WalletType } from "@/lib/types";
 import { transactionsRef, walletRef, walletsRef } from "./refs";
 
 export interface WalletInput {
@@ -40,11 +40,20 @@ export function subscribeToWallets(
 }
 
 export async function createWallet(uid: string, input: WalletInput): Promise<string> {
+  if (input.walletType === "credit" && (!input.creditLimitMinor || input.creditLimitMinor <= 0)) {
+    throw new Error("Credit wallets require a positive credit limit");
+  }
+
+  // Credit wallets start at full available credit (balanceMinor === limit).
+  // Standard wallets start at whatever the user typed as a starting balance.
+  const balanceMinor =
+    input.walletType === "credit" ? input.creditLimitMinor! : input.initialBalanceMinor;
+
   const ref = await addDoc(walletsRef(uid), {
     id: "",
     name: input.name,
     currency: input.currency,
-    balanceMinor: input.initialBalanceMinor,
+    balanceMinor,
     icon: input.icon,
     color: input.color,
     walletType: input.walletType,
@@ -59,36 +68,56 @@ export async function createWallet(uid: string, input: WalletInput): Promise<str
   return ref.id;
 }
 
+export interface WalletUpdateInput extends Pick<WalletInput, "name" | "icon" | "color"> {
+  /** Only provided when editing a credit wallet's limit. */
+  creditLimitMinor?: number;
+  /** Only provided when editing a credit wallet's top-up deadline. */
+  creditDueDay?: number;
+  /** Recomputed available balance, sent when creditLimitMinor changes. */
+  balanceMinor?: number;
+}
+
 export async function updateWallet(
   uid: string,
   walletId: string,
-  input: Pick<WalletInput, "name" | "icon" | "color">
+  input: WalletUpdateInput
 ): Promise<void> {
-  await updateDoc(walletRef(uid, walletId), {
+  const updates: Record<string, unknown> = {
     name: input.name,
     icon: input.icon,
     color: input.color,
-  });
+  };
+  if (input.creditLimitMinor !== undefined) {
+    updates.creditLimitMinor = input.creditLimitMinor;
+  }
+  if (input.creditDueDay !== undefined) {
+    updates.creditDueDay = input.creditDueDay;
+  }
+  if (input.balanceMinor !== undefined) {
+    updates.balanceMinor = input.balanceMinor;
+  }
+  await updateDoc(walletRef(uid, walletId), updates);
 }
 
 export async function deleteWallet(uid: string, walletId: string): Promise<void> {
-  const wRef = walletRef(uid, walletId);
-  const walletSnap = await getDoc(wRef);
-  if (!walletSnap.exists()) throw new Error("Wallet not found");
+  const batch = writeBatch(db);
 
-  const walletName = walletSnap.data().name;
-  const [sourceTransactions, destinationTransactions] = await Promise.all([
+  // A wallet can be referenced by a transaction two ways:
+  // - as the primary wallet (income/expense/transfer source)
+  // - as the destination of a transfer (toWalletId)
+  const [ownedSnap, receivedSnap] = await Promise.all([
     getDocs(query(transactionsRef(uid), where("walletId", "==", walletId))),
     getDocs(query(transactionsRef(uid), where("toWalletId", "==", walletId))),
   ]);
 
-  const batch = writeBatch(db);
-  for (const transaction of sourceTransactions.docs) {
-    batch.update(transaction.ref, { walletName });
+  const seen = new Set<string>();
+  for (const docSnap of [...ownedSnap.docs, ...receivedSnap.docs]) {
+    if (seen.has(docSnap.id)) continue;
+    seen.add(docSnap.id);
+    batch.delete(docSnap.ref);
   }
-  for (const transaction of destinationTransactions.docs) {
-    batch.update(transaction.ref, { toWalletName: walletName });
-  }
-  batch.delete(wRef);
+
+  batch.delete(walletRef(uid, walletId));
+
   await batch.commit();
 }
