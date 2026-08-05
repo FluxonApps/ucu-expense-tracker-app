@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth-provider";
 import { useData } from "@/components/data-provider";
@@ -14,7 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -24,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createTransaction } from "@/lib/firestore/transactions";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Building2, Upload, X } from "lucide-react";
 
 interface ImportTransactionsDialogProps {
   open: boolean;
@@ -40,24 +39,41 @@ export function ImportTransactionsDialog({
   const { user } = useAuth();
   const { wallets, categories } = useData();
 
+  const [selectedBank, setSelectedBank] = useState<string>("monobank");
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const handleImport = async () => {
     if (!user) return;
+    if (!selectedBank) {
+      toast.error("Please select a bank first.");
+      return;
+    }
     if (!selectedWalletId) {
-      toast.error("Please select a wallet first");
+      toast.error("Please select a wallet first.");
       return;
     }
     if (!file) {
-      toast.error("Please select a file");
+      toast.error("Please select a file.");
+      return;
+    }
+
+    const fileName = file.name.toLowerCase();
+    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+      toast.error("Excel files (.xlsx) are not supported. Please open the file in Excel/Numbers and choose 'Save As > CSV'.");
+      return;
+    }
+    if (!fileName.endsWith('.csv')) {
+      toast.error("Invalid file format. Please upload a .csv file.");
       return;
     }
 
     const selectedWallet = wallets.find((w) => w.id === selectedWalletId);
     if (!selectedWallet) {
-      toast.error("Selected wallet not found");
+      toast.error("Selected wallet not found.");
       return;
     }
 
@@ -68,48 +84,82 @@ export function ImportTransactionsDialog({
       const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
 
       if (lines.length <= 1) {
-        toast.error("The selected file contains no transaction rows.");
-        setIsImporting(false);
-        return;
+        throw new Error("The selected file is empty or contains no transaction rows.");
       }
 
-      // VALIDATION: Check if the header row contains a Date/Дата column
-      const headerLine = lines[0].toLowerCase();
-      if (!headerLine.includes("дата") && !headerLine.includes("date")) {
-        toast.error("Invalid format: The first column must contain the 'Date' or 'Дата' field.");
-        setIsImporting(false);
-        return;
+      let headerIndex = -1;
+      let delimiter = ",";
+
+      const sample = lines.slice(0, 5).join("\n");
+      if (sample.includes(";")) delimiter = ";";
+      else if (sample.includes("\t")) delimiter = "\t";
+
+      const splitRegex = new RegExp(`${delimiter}(?=(?:(?:[^"]*"){2})*[^"]*$)`);
+
+      // Look for Monobank header, removing outer quotes if present
+      for (let i = 0; i < Math.min(lines.length, 10); i++) {
+        let cleanLine = lines[i].trim();
+        if (cleanLine.startsWith('"') && cleanLine.endsWith('"')) {
+          cleanLine = cleanLine.slice(1, -1);
+        }
+
+        const cols = cleanLine.split(splitRegex).map(c =>
+          c.replace(/^"+|"+$/g, "").replace(/""/g, '"').trim().toLowerCase()
+        );
+
+        // Flexible check for Monobank date header
+        if (cols[0] && (cols[0].includes("дата") && cols[0].includes("операці"))) {
+          headerIndex = i;
+          break;
+        }
+      }
+
+      if (headerIndex === -1) {
+        throw new Error("Invalid CSV format: Could not find the standard Monobank header ('Дата і час операції'). Ensure the file structure is correct.");
       }
 
       const transactionsToAdd = [];
 
-      for (let i = 1; i < lines.length; i++) {
+      for (let i = headerIndex + 1; i < lines.length; i++) {
         let line = lines[i].trim();
+        if (!line) continue;
 
+        // Strip enclosing row-level quotes if Monobank wrapped the whole line
         if (line.startsWith('"') && line.endsWith('"')) {
-          line = line.substring(1, line.length - 1);
+          line = line.slice(1, -1);
         }
 
-        const columns = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map((col) =>
+        const columns = line.split(splitRegex).map((col) =>
           col.replace(/^"+|"+$/g, "").replace(/""/g, '"').trim()
         );
 
         if (columns.length < 4) continue;
 
         const dateStr = columns[0];
-        const note = columns[1];
+        const note = columns[1] || "";
         const mccCode = columns[2] || "";
         let amountStr = columns[3];
 
         if (!dateStr || !amountStr) continue;
 
         const [datePart, timePart = "00:00:00"] = dateStr.split(" ");
+        if (!datePart) continue;
+
         const datePieces = datePart.split(".");
         if (datePieces.length < 3) continue;
 
-        const [day, month, year] = datePieces;
-        const [hour = "0", minute = "0", second = "0"] = timePart.split(":");
+        let day, month, year;
+        if (datePieces[0].length === 4) {
+          year = datePieces[0];
+          month = datePieces[1];
+          day = datePieces[2];
+        } else {
+          day = datePieces[0];
+          month = datePieces[1];
+          year = datePieces[2];
+        }
 
+        const [hour = "0", minute = "0", second = "0"] = timePart.split(":");
         const txDate = new Date(
           Number(year),
           Number(month) - 1,
@@ -119,11 +169,7 @@ export function ImportTransactionsDialog({
           Number(second)
         );
 
-        amountStr = amountStr
-          .replace(/−/g, "-")
-          .replace(/\s/g, "")
-          .replace(",", ".");
-
+        amountStr = amountStr.replace(/−/g, "-").replace(/\s/g, "").replace(",", ".");
         const numericMatch = amountStr.match(/-?\d+\.?\d*/);
         if (!numericMatch) continue;
 
@@ -133,6 +179,7 @@ export function ImportTransactionsDialog({
         const isIncome = amount > 0;
 
         let matchedCategoryName = MCC_CATEGORY_MAP[mccCode];
+
         if (!matchedCategoryName && isIncome) {
           matchedCategoryName = "Other Income";
         }
@@ -153,14 +200,12 @@ export function ImportTransactionsDialog({
       }
 
       if (transactionsToAdd.length === 0) {
-        toast.error("Could not parse any valid transactions. Check if columns match the expected bank format.");
-        setIsImporting(false);
-        return;
+        throw new Error("No valid transactions found. Make sure the columns align with the expected Monobank format.");
       }
 
-      await Promise.all(
-        transactionsToAdd.map((tx) => createTransaction(user.uid, tx))
-      );
+      for (const tx of transactionsToAdd) {
+        await createTransaction(user.uid, tx);
+      }
 
       toast.success(`Successfully imported ${transactionsToAdd.length} transactions!`);
 
@@ -170,7 +215,11 @@ export function ImportTransactionsDialog({
       setSelectedWalletId("");
     } catch (error) {
       console.error("Import error:", error);
-      toast.error("Failed to parse or save the file due to an invalid structure.");
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error("Failed to parse or save the file due to an invalid structure.");
+      }
     } finally {
       setIsImporting(false);
     }
@@ -182,18 +231,42 @@ export function ImportTransactionsDialog({
         <DialogHeader>
           <DialogTitle>Import Transactions</DialogTitle>
           <DialogDescription>
-            Upload a statement file from your banking application to automatically add transactions.
+            Upload a statement file from your bank to automatically add transactions.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Informational Guidance Box */}
-          <div className="flex gap-3 rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
-            <AlertCircle className="size-4 shrink-0 text-primary mt-0.5" />
+          <div className="flex gap-3 rounded-lg border bg-blue-50/50 dark:bg-blue-900/20 p-3 text-xs text-muted-foreground border-blue-200 dark:border-blue-800">
+            <AlertCircle className="size-4 shrink-0 text-blue-500 mt-0.5" />
             <div className="space-y-1">
-              <p className="font-medium text-foreground">Expected CSV Structure:</p>
-              <p>The file must contain standard columns starting with <strong>Date/Дата</strong> in the first column, followed by details, MCC code, and amount.</p>
+              <p className="font-medium text-foreground">Import Requirements:</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li>Currently, <strong>only Monobank</strong> imports are supported.</li>
+                <li>File must be strictly in <strong>.csv</strong> format.</li>
+                <li>The file structure must match the standard Monobank export (Columns: <em>Дата і час операції, Деталі операції, MCC, Сума в валюті картки (UAH)</em>). Otherwise, it will not work.</li>
+              </ul>
+              <p className="font-semibold pt-1 text-blue-700 dark:text-blue-400">Note: Re-importing a file may create duplicate transactions.</p>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="bank" className="flex items-center gap-1.5">
+              <Building2 className="size-3.5" />
+              Select Bank
+            </Label>
+            <Select value={selectedBank} onValueChange={setSelectedBank}>
+              <SelectTrigger id="bank">
+                <SelectValue placeholder="Choose a bank" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="monobank">Monobank</SelectItem>
+                <SelectItem value="privatbank" disabled>PrivatBank (Coming Soon)</SelectItem>
+                <SelectItem value="pumb" disabled>PUMB (Coming Soon)</SelectItem>
+                <SelectItem value="sense" disabled>Sense Bank (Coming Soon)</SelectItem>
+                <SelectItem value="abank" disabled>A-Bank (Coming Soon)</SelectItem>
+                <SelectItem value="ukrsibbank" disabled>UKRSIBBANK (Coming Soon)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
@@ -214,10 +287,45 @@ export function ImportTransactionsDialog({
 
           <div className="space-y-2">
             <Label htmlFor="file">Bank Statement (CSV)</Label>
-            <Input
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                className="shrink-0"
+              >
+                <Upload className="mr-2 size-4" />
+                {file ? "Change File" : "Select File"}
+              </Button>
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="text-sm text-muted-foreground truncate">
+                  {file ? file.name : "No file selected"}
+                </span>
+
+                {file && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      setFile(null);
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = "";
+                      }
+                    }}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <input
               id="file"
               type="file"
-              accept=".csv,.tsv,.txt"
+              accept=".csv"
+              className="hidden"
+              ref={fileInputRef}
               onChange={(e) => setFile(e.target.files?.[0] || null)}
             />
           </div>
@@ -227,8 +335,8 @@ export function ImportTransactionsDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isImporting}>
             Cancel
           </Button>
-          <Button onClick={handleImport} disabled={!file || !selectedWalletId || isImporting}>
-            {isImporting ? "Importing..." : "Import"}
+          <Button onClick={handleImport} disabled={!file || !selectedWalletId || !selectedBank || isImporting}>
+            {isImporting ? "Importing..." : "Import CSV"}
           </Button>
         </DialogFooter>
       </DialogContent>

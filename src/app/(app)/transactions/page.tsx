@@ -39,14 +39,6 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -79,7 +71,6 @@ import {
 import {
   deleteRecurringTransaction,
   setRecurringTransactionActive,
-  subscribeToRecurringTransactions,
 } from "@/lib/firestore/recurring-transactions";
 import type { RecurringTransaction, Transaction, TransactionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -152,7 +143,7 @@ export default function TransactionsPage() {
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
+  const [recurringTransactions] = useState<RecurringTransaction[]>([]);
   const [cursor, setCursor] = useState<TransactionsPage["cursor"]>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -218,6 +209,7 @@ export default function TransactionsPage() {
     if (dateTo) sessionStorage.setItem("tx:to", dateTo.toISOString().slice(0, 10));
     else sessionStorage.removeItem("tx:to");
   }, [filterWallet, filterCategory, filterType, filterPayment, dateFrom, dateTo, pathname, router]);
+
   const loadMore = async () => {
     if (!user || !cursor) return;
     setLoadingMore(true);
@@ -324,16 +316,23 @@ export default function TransactionsPage() {
             All income, expenses, and transfers
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditingTx(null);
-            setEditingRecurringTx(null);
-            setFormOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Add transaction
-        </Button>
+        {/* IMPORT & ADD TRANSACTION BUTTONS */}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Download className="size-4" />
+            Import transactions
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingTx(null);
+              setEditingRecurringTx(null);
+              setFormOpen(true);
+            }}
+          >
+            <Plus className="size-4" />
+            Add transaction
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -717,32 +716,13 @@ export default function TransactionsPage() {
         recurringTransaction={editingRecurringTx}
         onSaved={loadFirstPage}
       />
-    {/* Import Transactions Modal */}
+
+      {/* Import Transactions Modal */}
       <ImportTransactionsDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         onSuccess={loadFirstPage}
       />
-
-      {/* Import Transactions Modal Placeholder */}
-      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Import Transactions</DialogTitle>
-            <DialogDescription>
-              Import transactions directly from your banking application or file.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-8 text-center text-sm text-muted-foreground border-2 border-dashed rounded-lg">
-            Import functionality will be implemented here.
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog
         open={Boolean(deletingTx)}
