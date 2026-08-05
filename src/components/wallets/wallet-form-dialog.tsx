@@ -147,7 +147,12 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
 
           {!isEdit && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div
+                className={cn(
+                  "grid gap-3",
+                  walletType === "credit" ? "grid-cols-1" : "grid-cols-2"
+                )}
+              >
                 <div className="space-y-1.5">
                   <Label>Currency</Label>
                   <Select
@@ -166,16 +171,18 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="wallet-balance">Starting balance</Label>
-                  <Input
-                    id="wallet-balance"
-                    placeholder="0.00"
-                    inputMode="decimal"
-                    value={initialBalance}
-                    onChange={(e) => setInitialBalance(e.target.value)}
-                  />
-                </div>
+                {walletType !== "credit" && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="wallet-balance">Starting balance</Label>
+                    <Input
+                      id="wallet-balance"
+                      placeholder="0.00"
+                      inputMode="decimal"
+                      value={initialBalance}
+                      onChange={(e) => setInitialBalance(e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -205,6 +212,9 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
                       value={creditLimit}
                       onChange={(e) => setCreditLimit(e.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Also sets your starting available credit.
+                    </p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="wallet-credit-due-day">Top-up deadline</Label>
