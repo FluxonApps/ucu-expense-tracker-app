@@ -44,6 +44,26 @@ export interface Category {
   isDefault: boolean;
 }
 
+export interface BudgetGoal {
+  id: string;
+
+  /** Expense category monitored by this goal. */
+  categoryId: string;
+
+  /** Budget limit in kopiykas/cents. */
+  limitMinor: number;
+
+  currency: CurrencyCode;
+
+  /** Beginning of the first budget cycle. */
+  startDate: Timestamp;
+
+  /** Length of every repeating cycle, including both start and end days. */
+  periodDays: number;
+
+  createdAt: Timestamp;
+}
+
 export interface Transaction {
   id: string;
   type: TransactionType;

@@ -6,7 +6,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Category, Transaction, Wallet } from "@/lib/types";
+import type { BudgetGoal, Category, Transaction, Wallet } from "@/lib/types";
 
 function converter<T extends { id: string }>(): FirestoreDataConverter<T> {
   return {
@@ -23,6 +23,7 @@ function converter<T extends { id: string }>(): FirestoreDataConverter<T> {
 export const walletConverter = converter<Wallet>();
 export const transactionConverter = converter<Transaction>();
 export const categoryConverter = converter<Category>();
+export const budgetGoalConverter = converter<BudgetGoal>();
 
 export function walletsRef(uid: string) {
   return collection(db, "users", uid, "wallets").withConverter(walletConverter);
@@ -46,6 +47,20 @@ export function categoriesRef(uid: string) {
 
 export function categoryRef(uid: string, categoryId: string) {
   return doc(db, "users", uid, "categories", categoryId).withConverter(categoryConverter);
+}
+
+/** Collection containing all budget goals of one user. */
+export function budgetGoalsRef(uid: string) {
+  return collection(db, "users", uid, "budgetGoals").withConverter(
+    budgetGoalConverter
+  );
+}
+
+/** Reference to one particular budget goal. */
+export function budgetGoalRef(uid: string, goalId: string) {
+  return doc(db, "users", uid, "budgetGoals", goalId).withConverter(
+    budgetGoalConverter
+  );
 }
 
 export function userRef(uid: string) {
