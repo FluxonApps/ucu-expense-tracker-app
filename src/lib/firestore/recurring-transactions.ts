@@ -7,7 +7,9 @@ import {
   serverTimestamp,
   Timestamp,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import type { CurrencyCode, PaymentFrequency, RecurringTransaction } from "@/lib/types";
 import { recurringTransactionRef, recurringTransactionsRef } from "./refs";
 
@@ -115,6 +117,28 @@ export async function setRecurringTransactionActive(
     isActive,
     updatedAt: serverTimestamp(),
   });
+}
+
+/** Updates the future cadence of several schedules without changing their next payment date. */
+export async function updateRecurringTransactionsFrequency(
+  uid: string,
+  scheduleIds: string[],
+  frequency: PaymentFrequency
+): Promise<void> {
+  const ids = [...new Set(scheduleIds)];
+  if (ids.length === 0) return;
+
+  // Firestore permits no more than 500 writes in one batch.
+  for (let start = 0; start < ids.length; start += 500) {
+    const batch = writeBatch(db);
+    ids.slice(start, start + 500).forEach((scheduleId) => {
+      batch.update(recurringTransactionRef(uid, scheduleId), {
+        frequency,
+        updatedAt: serverTimestamp(),
+      });
+    });
+    await batch.commit();
+  }
 }
 
 export function deleteRecurringTransaction(uid: string, scheduleId: string): Promise<void> {

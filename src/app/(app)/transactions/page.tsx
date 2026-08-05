@@ -39,14 +39,6 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -72,6 +64,7 @@ import {
 import { formatMoney } from "@/lib/currencies";
 import {
   deleteTransaction,
+  deleteTransactions,
   fetchTransactionsPage,
   type TransactionFilters,
   type TransactionsPage,
@@ -79,7 +72,8 @@ import {
 import {
   deleteRecurringTransaction,
   setRecurringTransactionActive,
-    subscribeToRecurringTransactions,
+  subscribeToRecurringTransactions,
+  updateRecurringTransactionsFrequency,
 } from "@/lib/firestore/recurring-transactions";
 import type { RecurringTransaction, Transaction, TransactionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -166,6 +160,12 @@ export default function TransactionsPage() {
   const [deletingSchedule, setDeletingSchedule] = useState<RecurringTransaction | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deletingSchedulePending, setDeletingSchedulePending] = useState(false);
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
+  const [selectedScheduleIds, setSelectedScheduleIds] = useState<string[]>([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkFrequency, setBulkFrequency] = useState<RecurringTransaction["frequency"]>("monthly");
+  const [bulkFrequencyUpdating, setBulkFrequencyUpdating] = useState(false);
 
   const buildFilters = useCallback((): TransactionFilters => {
     return {
@@ -261,6 +261,57 @@ export default function TransactionsPage() {
     }
   };
 
+  const toggleTransactionSelection = (txId: string) => {
+    setSelectedTransactionIds((previous) =>
+      previous.includes(txId) ? previous.filter((id) => id !== txId) : [...previous, txId]
+    );
+  };
+
+  const toggleScheduleSelection = (scheduleId: string) => {
+    setSelectedScheduleIds((previous) =>
+      previous.includes(scheduleId)
+        ? previous.filter((id) => id !== scheduleId)
+        : [...previous, scheduleId]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    const selectedCount = selectedTransactionIds.length + selectedScheduleIds.length;
+    if (!user || selectedCount === 0) return;
+    setBulkDeleting(true);
+    try {
+      await Promise.all([
+        deleteTransactions(user.uid, selectedTransactionIds),
+        ...selectedScheduleIds.map((scheduleId) => deleteRecurringTransaction(user.uid, scheduleId)),
+      ]);
+      toast.success(`${selectedCount} payment(s) deleted`);
+      setSelectedTransactionIds([]);
+      setSelectedScheduleIds([]);
+      setBulkDeleteOpen(false);
+      loadFirstPage();
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to delete the selected transactions");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const handleBulkFrequencyChange = async () => {
+    if (!user || selectedScheduleIds.length === 0) return;
+    setBulkFrequencyUpdating(true);
+    try {
+      await updateRecurringTransactionsFrequency(user.uid, selectedScheduleIds, bulkFrequency);
+      toast.success(`Frequency changed for ${selectedScheduleIds.length} automatic payment(s)`);
+      setSelectedScheduleIds([]);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to change the payment frequency");
+    } finally {
+      setBulkFrequencyUpdating(false);
+    }
+  };
+
   const handleScheduleActive = async (schedule: RecurringTransaction) => {
     if (!user) return;
     try {
@@ -322,6 +373,15 @@ export default function TransactionsPage() {
   const visibleTransactions = transactions.filter(
     (tx) => filterPayment !== ONE_TIME || !tx.isAutomatic
   );
+  const allVisibleTransactionsSelected =
+    visibleTransactions.length > 0 &&
+    visibleTransactions.every((tx) => selectedTransactionIds.includes(tx.id));
+  const allVisibleSchedulesSelected =
+    visibleRecurringTransactions.length > 0 &&
+    visibleRecurringTransactions.every((schedule) => selectedScheduleIds.includes(schedule.id));
+  const selectedPaymentCount = selectedTransactionIds.length + selectedScheduleIds.length;
+  const canChangeBulkFrequency =
+    selectedScheduleIds.length > 0 && selectedTransactionIds.length === 0;
   const hasVisiblePayments =
     visibleTransactions.length > 0 ||
     (filterPayment === ALL && visibleRecurringTransactions.length > 0);
@@ -417,6 +477,56 @@ export default function TransactionsPage() {
         )}
       </div>
 
+      {selectedPaymentCount > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2">
+          <span className="text-sm font-medium">
+            {selectedPaymentCount} payment(s) selected
+          </span>
+          <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+            <Trash2 className="size-3.5" />
+            Delete selected
+          </Button>
+          {canChangeBulkFrequency && (
+            <>
+              <Select
+                value={bulkFrequency}
+                onValueChange={(value) =>
+                  setBulkFrequency(value as RecurringTransaction["frequency"])
+                }
+              >
+                <SelectTrigger size="sm" className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(frequencyLabel).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                onClick={handleBulkFrequencyChange}
+                disabled={bulkFrequencyUpdating}
+              >
+                {bulkFrequencyUpdating ? "Updating..." : "Change frequency"}
+              </Button>
+            </>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSelectedTransactionIds([]);
+              setSelectedScheduleIds([]);
+            }}
+          >
+            Clear selection
+          </Button>
+        </div>
+      )}
+
       {filterPayment === AUTOMATIC ? (
         <Card className="py-0">
           <CardContent className="p-0">
@@ -431,6 +541,20 @@ export default function TransactionsPage() {
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all automatic payments"
+                        checked={allVisibleSchedulesSelected}
+                        onChange={() =>
+                          setSelectedScheduleIds(
+                            allVisibleSchedulesSelected
+                              ? []
+                              : visibleRecurringTransactions.map((schedule) => schedule.id)
+                          )
+                        }
+                      />
+                    </TableHead>
                     <TableHead>Frequency</TableHead>
                     <TableHead>Next payment</TableHead>
                     <TableHead>Note</TableHead>
@@ -442,6 +566,14 @@ export default function TransactionsPage() {
                 <TableBody>
                   {visibleRecurringTransactions.map((schedule) => (
                     <TableRow key={schedule.id} className={!schedule.isActive ? "opacity-60" : ""}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select automatic payment ${schedule.note || schedule.id}`}
+                          checked={selectedScheduleIds.includes(schedule.id)}
+                          onChange={() => toggleScheduleSelection(schedule.id)}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Badge variant={schedule.isActive ? "secondary" : "outline"}>
                           {schedule.isActive ? frequencyLabel[schedule.frequency] : "Paused"}
@@ -528,6 +660,20 @@ export default function TransactionsPage() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all visible transactions"
+                      checked={allVisibleTransactionsSelected}
+                      onChange={() =>
+                        setSelectedTransactionIds(
+                          allVisibleTransactionsSelected
+                            ? []
+                            : visibleTransactions.map((transaction) => transaction.id)
+                        )
+                      }
+                    />
+                  </TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Note</TableHead>
@@ -545,6 +691,14 @@ export default function TransactionsPage() {
                         key={`schedule-${schedule.id}`}
                         className={cn("bg-muted/20", !schedule.isActive && "opacity-60")}
                       >
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select automatic payment ${schedule.note || schedule.id}`}
+                            checked={selectedScheduleIds.includes(schedule.id)}
+                            onChange={() => toggleScheduleSelection(schedule.id)}
+                          />
+                        </TableCell>
                         <TableCell className="whitespace-nowrap text-muted-foreground">
                           <div>{format(schedule.nextRunAt.toDate(), "yyyy-MM-dd")}</div>
                           <span className="text-xs">Next automatic payment</span>
@@ -629,6 +783,14 @@ export default function TransactionsPage() {
                   const category = categoryOf(tx.categoryId);
                   return (
                     <TableRow key={tx.id}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select transaction ${tx.note || tx.id}`}
+                          checked={selectedTransactionIds.includes(tx.id)}
+                          onChange={() => toggleTransactionSelection(tx.id)}
+                        />
+                      </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
                         {tx.date.toDate().toISOString().slice(0, 10)}
                       </TableCell>
@@ -751,8 +913,8 @@ export default function TransactionsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this transaction?</AlertDialogTitle>
             <AlertDialogDescription>
-              The wallet balance will be adjusted accordingly. This action cannot be
-              undone.
+              Existing wallet balances will be adjusted. Transactions linked to a deleted
+              wallet can still be removed. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -766,6 +928,33 @@ export default function TransactionsPage() {
               className="bg-destructive text-white hover:bg-destructive/90"
             >
               {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedPaymentCount} selected payment(s)?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Existing wallet balances will be adjusted. Future automatic payments will stop,
+              while past payments stay in history. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                handleBulkDelete();
+              }}
+              disabled={bulkDeleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {bulkDeleting ? "Deleting..." : "Delete selected"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
