@@ -444,9 +444,11 @@ export default function TransactionsPage() {
       (!recurringDateTo || nextPaymentDate <= recurringDateTo)
     );
   });
-  const visibleTransactions = transactions.filter(
-    (tx) => filterPayment !== ONE_TIME || !tx.isAutomatic
-  );
+  const visibleTransactions = transactions.filter((tx) => {
+    if (filterPayment === ONE_TIME) return tx.isAutomatic !== true;
+    if (filterPayment === AUTOMATIC) return tx.isAutomatic === true;
+    return true;
+  });
   const allVisibleTransactionsSelected =
     visibleTransactions.length > 0 &&
     visibleTransactions.every((tx) => selectedTransactionIds.includes(tx.id));
