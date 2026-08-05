@@ -327,7 +327,20 @@ export default function DashboardPage() {
               <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
-                <YAxis tickLine={false} axisLine={false} fontSize={12} width={50} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  width={50}
+                  tickFormatter={(value) =>
+                    Math.abs(value) >= 10000
+                      ? new Intl.NumberFormat("en-US", {
+                          notation: "compact",
+                          maximumFractionDigits: 2,
+                        }).format(value)
+                      : `${value}`
+                  }
+                />
                 <Tooltip
                   formatter={(value, name) => [
                     `${Number(value).toLocaleString("uk-UA")} ${CURRENCY_SYMBOLS[displayCurrency]}`,
