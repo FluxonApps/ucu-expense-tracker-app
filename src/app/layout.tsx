@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/components/auth-provider";
+import { DisplayCurrencyProvider } from "@/components/display-currency-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -35,7 +36,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <DisplayCurrencyProvider>{children}</DisplayCurrencyProvider>
+          </AuthProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>

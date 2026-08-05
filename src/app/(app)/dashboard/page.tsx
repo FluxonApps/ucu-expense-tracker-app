@@ -25,21 +25,36 @@ import {
 } from "recharts";
 import { useAuth } from "@/components/auth-provider";
 import { useData } from "@/components/data-provider";
+import { useDisplayCurrency } from "@/components/display-currency-provider";
+import { CurrencySwitcher } from "@/components/currency-switcher";
 import { AppIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatMoney } from "@/lib/currencies";
+import { CURRENCY_SYMBOLS, formatMoney } from "@/lib/currencies";
 import { subscribeToTransactionsInRange } from "@/lib/firestore/transactions";
 import type { CurrencyCode, Transaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { convertMinor, useCurrencyRates } from "@/lib/use-currency-rates";
 
 const BASE_CURRENCY: CurrencyCode = "UAH";
+const CHART_COLORS = [
+  "#3b82f6",
+  "#22c55e",
+  "#f97316",
+  "#8b5cf6",
+  "#ef4444",
+  "#eab308",
+  "#06b6d4",
+  "#ec4899",
+  "#6366f1",
+  "#737373",
+];
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const { wallets, categories, walletsLoading } = useData();
+  const { displayCurrency } = useDisplayCurrency();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [txLoading, setTxLoading] = useState(true);
@@ -64,12 +79,12 @@ export default function DashboardPage() {
 
   // Get the currency rates
   const { rates, loading: ratesLoading, error: ratesError } = useCurrencyRates();
-  /** Converts an amount into the base currency. */
+  /** Converts an amount into the currently selected display currency. */
   const toBase = useMemo(() => {
     return (amountMinor: number, _currency: CurrencyCode): number => {
-      return convertMinor(amountMinor, _currency, BASE_CURRENCY, rates) ?? 0;
+      return convertMinor(amountMinor, _currency, displayCurrency, rates) ?? 0;
     };
-  }, [rates]);
+  }, [rates, displayCurrency]);
 
   const totalBalanceMinor = useMemo(
     () => wallets.reduce((sum, w) => sum + toBase(w.balanceMinor, w.currency), 0),
@@ -116,7 +131,7 @@ export default function DashboardPage() {
       .sort((a, b) => b.value - a.value);
   }, [monthTxs, categories, toBase]);
 
-  // Bars: income vs expenses per month for the last 6 months
+// Bars: income vs expenses per month for the last 6 months
   const monthlyData = useMemo(() => {
     const months: { key: string; label: string; income: number; expense: number }[] = [];
     for (let i = 5; i >= 0; i--) {
@@ -134,11 +149,15 @@ export default function DashboardPage() {
       const key = format(tx.date.toDate(), "yyyy-MM");
       const bucket = byKey.get(key);
       if (!bucket) continue;
-      const amount = Math.round(toBase(tx.amountMinor, tx.currency) / 100);
-      if (tx.type === "income") bucket.income += amount;
-      else bucket.expense += amount;
+      const amountMinor = toBase(tx.amountMinor, tx.currency);
+      if (tx.type === "income") bucket.income += amountMinor;
+      else bucket.expense += amountMinor;
     }
-    return months;
+    return months.map((m) => ({
+      ...m,
+      income: Math.round(m.income / 100),
+      expense: Math.round(m.expense / 100),
+    }));
   }, [transactions, now, toBase]);
 
   // Daily spending for the current month
@@ -153,9 +172,9 @@ export default function DashboardPage() {
     for (const tx of monthTxs) {
       if (tx.type !== "expense") continue;
       const bucket = byKey.get(format(tx.date.toDate(), "yyyy-MM-dd"));
-      if (bucket) bucket.expense += Math.round(toBase(tx.amountMinor, tx.currency) / 100);
+      if (bucket) bucket.expense += toBase(tx.amountMinor, tx.currency);
     }
-    return buckets;
+    return buckets.map((b) => ({ ...b, expense: Math.round(b.expense / 100) }));
   }, [monthTxs, monthStart, now, toBase]);
 
   const recentTxs = useMemo(() => transactions.slice(0, 8), [transactions]);
@@ -186,11 +205,14 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Your finances for {format(now, "MMMM yyyy")}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Your finances for {format(now, "MMMM yyyy")}
+          </p>
+        </div>
+        <CurrencySwitcher />
       </div>
 
       {ratesError && (
@@ -212,10 +234,11 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold tabular-nums">
-              {formatMoney(totalBalanceMinor, BASE_CURRENCY)}
+              {formatMoney(totalBalanceMinor, displayCurrency)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Across {wallets.length} wallet{wallets.length === 1 ? "" : "s"}, converted to UAH
+              Across {wallets.length} wallet{wallets.length === 1 ? "" : "s"}, converted
+              to {displayCurrency}
             </p>
           </CardContent>
         </Card>
@@ -228,7 +251,7 @@ export default function DashboardPage() {
           <CardContent>
             <p className="flex items-center gap-2 text-2xl font-semibold tabular-nums text-green-600 dark:text-green-500">
               <TrendingUp className="size-5" />
-              {formatMoney(monthIncomeMinor, BASE_CURRENCY)}
+              {formatMoney(monthIncomeMinor, displayCurrency)}
             </p>
           </CardContent>
         </Card>
@@ -241,7 +264,7 @@ export default function DashboardPage() {
           <CardContent>
             <p className="flex items-center gap-2 text-2xl font-semibold tabular-nums text-red-600 dark:text-red-500">
               <TrendingDown className="size-5" />
-              {formatMoney(monthExpense, BASE_CURRENCY)}
+              {formatMoney(monthExpense, displayCurrency)}
             </p>
           </CardContent>
         </Card>
@@ -275,7 +298,7 @@ export default function DashboardPage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value) => [`${Number(value).toLocaleString("uk-UA")} ₴`]}
+                      formatter={(value) => [`${Number(value).toLocaleString("uk-UA")} ${CURRENCY_SYMBOLS[displayCurrency]}`]}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -288,7 +311,7 @@ export default function DashboardPage() {
                       />
                       <span className="flex-1 truncate">{entry.name}</span>
                       <span className="tabular-nums text-muted-foreground">
-                        {entry.value.toLocaleString("uk-UA")} ₴
+                        {entry.value.toLocaleString("uk-UA")} {CURRENCY_SYMBOLS[displayCurrency]}
                       </span>
                     </div>
                   ))}
@@ -310,7 +333,7 @@ export default function DashboardPage() {
                 <YAxis tickLine={false} axisLine={false} fontSize={12} width={50} />
                 <Tooltip
                   formatter={(value, name) => [
-                    `${Number(value).toLocaleString("uk-UA")} ₴`,
+                    `${Number(value).toLocaleString("uk-UA")} ${CURRENCY_SYMBOLS[displayCurrency]}`,
                     name === "income" ? "Income" : "Expenses",
                   ]}
                 />
@@ -335,7 +358,7 @@ export default function DashboardPage() {
                 <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} interval={0} />
                 <YAxis tickLine={false} axisLine={false} fontSize={11} width={50} />
                 <Tooltip
-                  formatter={(value) => [`${Number(value).toLocaleString("uk-UA")} ₴`, "Spent"]}
+                  formatter={(value) => [`${Number(value).toLocaleString("uk-UA")} ${CURRENCY_SYMBOLS[displayCurrency]}`, "Spent"]}
                 />
                 <Bar dataKey="expense" fill="#3b82f6" radius={[3, 3, 0, 0]} />
               </BarChart>
