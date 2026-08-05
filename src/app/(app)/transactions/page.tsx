@@ -138,6 +138,8 @@ export default function TransactionsPage() {
     searchParams.get("category") ?? readStored("tx:category") ?? ALL);
   const [filterType, setFilterType] = useState(
     searchParams.get("type") ?? readStored("tx:type") ?? ALL);
+  const [filterPayment, setFilterPayment] = useState(
+    searchParams.get("payment") ?? readStored("tx:payment") ?? ALL);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(() => {
     const v = searchParams.get("from") ?? readStored("tx:from");
     return v ? new Date(v) : undefined;
@@ -198,6 +200,7 @@ export default function TransactionsPage() {
     if (filterWallet !== ALL) params.set("wallet", filterWallet);
     if (filterCategory !== ALL) params.set("category", filterCategory);
     if (filterType !== ALL) params.set("type", filterType);
+    if (filterPayment !== ALL) params.set("payment", filterPayment);
     if (dateFrom) params.set("from", dateFrom.toISOString().slice(0, 10));
     if (dateTo) params.set("to", dateTo.toISOString().slice(0, 10));
 
@@ -207,11 +210,12 @@ export default function TransactionsPage() {
     sessionStorage.setItem("tx:wallet", filterWallet);
     sessionStorage.setItem("tx:category", filterCategory);
     sessionStorage.setItem("tx:type", filterType);
+    sessionStorage.setItem("tx:payment", filterPayment);
     if (dateFrom) sessionStorage.setItem("tx:from", dateFrom.toISOString().slice(0, 10));
     else sessionStorage.removeItem("tx:from");
     if (dateTo) sessionStorage.setItem("tx:to", dateTo.toISOString().slice(0, 10));
     else sessionStorage.removeItem("tx:to");
-  }, [filterWallet, filterCategory, filterType, dateFrom, dateTo, pathname, router]);
+  }, [filterWallet, filterCategory, filterType, filterPayment, dateFrom, dateTo, pathname, router]);
   const loadMore = async () => {
     if (!user || !cursor) return;
     setLoadingMore(true);
