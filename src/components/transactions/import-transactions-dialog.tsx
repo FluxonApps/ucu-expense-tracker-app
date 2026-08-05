@@ -274,7 +274,6 @@ export function ImportTransactionsDialog({
                 <li>File must be strictly in <strong>.csv</strong> format.</li>
                 <li>The file structure must match the standard Monobank export.</li>
               </ul>
-              <p className="font-semibold pt-1 text-emerald-700 dark:text-emerald-400">Note: Existing transactions are automatically skipped using Base64 Hashed IDs.</p>
             </div>
           </div>
 

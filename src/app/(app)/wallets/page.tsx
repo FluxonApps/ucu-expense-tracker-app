@@ -124,7 +124,7 @@ export default function WalletsPage() {
           {wallets.map((wallet) => (
             <Card
               key={wallet.id}
-              className="relative overflow-hidden bg-white dark:bg-zinc-900 text-neutral-900 dark:text-zinc-100 border-border"
+              className="relative overflow-hidden bg-white dark:bg-zinc-900 text-neutral-900 dark:text-zinc-100 border-transparent shadow-sm"
             >
               <div
                 className="absolute inset-y-0 left-0 w-1.5"

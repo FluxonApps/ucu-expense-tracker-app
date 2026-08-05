@@ -32,6 +32,11 @@ function minorToInputString(minor: number): string {
   return (minor / 100).toFixed(2);
 }
 
+// Filter out black colors so they never appear in the picker
+const AVAILABLE_COLORS = WALLET_COLORS.filter(
+  (c) => c.toLowerCase() !== "#000000" && c.toLowerCase() !== "#000" && c.toLowerCase() !== "black"
+);
+
 interface WalletFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -50,7 +55,7 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
   const [creditLimit, setCreditLimit] = useState("");
   const [creditDueDay, setCreditDueDay] = useState("");
   const [icon, setIcon] = useState(WALLET_ICONS[0]);
-  const [color, setColor] = useState(WALLET_COLORS[0]);
+  const [color, setColor] = useState(AVAILABLE_COLORS[0] ?? "#22c55e");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -64,7 +69,13 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
       );
       setCreditDueDay(wallet?.creditDueDay !== undefined ? String(wallet.creditDueDay) : "");
       setIcon(wallet?.icon ?? WALLET_ICONS[0]);
-      setColor(wallet?.color ?? WALLET_COLORS[0]);
+
+      const initialColor = wallet?.color;
+      if (initialColor && AVAILABLE_COLORS.includes(initialColor)) {
+        setColor(initialColor);
+      } else {
+        setColor(AVAILABLE_COLORS[0] ?? "#22c55e");
+      }
     }
   }, [open, wallet]);
 
@@ -119,8 +130,6 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
       }
       creditDueDayNum = dueDay;
 
-      // Changing the limit shouldn't change what you already owe - shift the
-      // available balance by the same delta as the limit change.
       const limitDelta = creditLimitMinor - (wallet.creditLimitMinor ?? 0);
       newBalanceMinor = wallet.balanceMinor + limitDelta;
     }
@@ -330,7 +339,7 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
           <div className="space-y-1.5">
             <Label>Color</Label>
             <div className="flex flex-wrap gap-2">
-              {WALLET_COLORS.map((colorValue) => (
+              {AVAILABLE_COLORS.map((colorValue) => (
                 <button
                   key={colorValue}
                   type="button"
