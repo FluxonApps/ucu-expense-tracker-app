@@ -22,6 +22,11 @@ export interface WalletInput {
   color: string;
   /** Starting balance in minor units. */
   initialBalanceMinor: number;
+  walletType: WalletType;
+  /** Required when walletType is "credit", minor units. */
+  creditLimitMinor?: number;
+  /** Required when walletType is "credit", day of month (1-31). */
+  creditDueDay?: number;
 }
 
 export function subscribeToWallets(
@@ -42,6 +47,13 @@ export async function createWallet(uid: string, input: WalletInput): Promise<str
     balanceMinor: input.initialBalanceMinor,
     icon: input.icon,
     color: input.color,
+    walletType: input.walletType,
+    ...(input.walletType === "credit"
+      ? {
+          creditLimitMinor: input.creditLimitMinor,
+          creditDueDay: input.creditDueDay,
+        }
+      : {}),
     createdAt: serverTimestamp() as unknown as Timestamp,
   });
   return ref.id;

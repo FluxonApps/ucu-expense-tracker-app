@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { parseAmountToMinor, SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import { createWallet, updateWallet } from "@/lib/firestore/wallets";
-import type { CurrencyCode, Wallet } from "@/lib/types";
+import type { CurrencyCode, Wallet, WalletType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface WalletFormDialogProps {
@@ -41,6 +41,9 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState<CurrencyCode>("UAH");
   const [initialBalance, setInitialBalance] = useState("");
+  const [walletType, setWalletType] = useState<WalletType>("standard");
+  const [creditLimit, setCreditLimit] = useState("");
+  const [creditDueDay, setCreditDueDay] = useState("");
   const [icon, setIcon] = useState(WALLET_ICONS[0]);
   const [color, setColor] = useState(WALLET_COLORS[0]);
   const [submitting, setSubmitting] = useState(false);
@@ -50,6 +53,9 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
       setName(wallet?.name ?? "");
       setCurrency(wallet?.currency ?? "UAH");
       setInitialBalance("");
+      setWalletType(wallet?.walletType ?? "standard");
+      setCreditLimit("");
+      setCreditDueDay("");
       setIcon(wallet?.icon ?? WALLET_ICONS[0]);
       setColor(wallet?.color ?? WALLET_COLORS[0]);
     }
@@ -60,13 +66,34 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
     if (!user) return;
 
     let initialBalanceMinor = 0;
-    if (!isEdit && initialBalance.trim()) {
-      const parsed = parseAmountToMinor(initialBalance);
-      if (parsed === null || parsed < 0) {
-        toast.error("Starting balance must be a valid non-negative number");
-        return;
+    let creditLimitMinor: number | undefined;
+    let creditDueDayNum: number | undefined;
+
+    if (!isEdit) {
+      if (initialBalance.trim()) {
+        const parsed = parseAmountToMinor(initialBalance);
+        if (parsed === null || parsed < 0) {
+          toast.error("Starting balance must be a valid non-negative number");
+          return;
+        }
+        initialBalanceMinor = parsed;
       }
-      initialBalanceMinor = parsed;
+
+      if (walletType === "credit") {
+        const parsedLimit = parseAmountToMinor(creditLimit);
+        if (parsedLimit === null || parsedLimit <= 0) {
+          toast.error("Credit limit must be a valid positive number");
+          return;
+        }
+        creditLimitMinor = parsedLimit;
+
+        const dueDay = Number(creditDueDay);
+        if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+          toast.error("Top-up deadline must be a day between 1 and 31");
+          return;
+        }
+        creditDueDayNum = dueDay;
+      }
     }
 
     setSubmitting(true);
@@ -81,6 +108,9 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
           icon,
           color,
           initialBalanceMinor,
+          walletType,
+          creditLimitMinor,
+          creditDueDay: creditDueDayNum,
         });
         toast.success("Wallet created");
       }
@@ -116,36 +146,81 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
           </div>
 
           {!isEdit && (
-            <div className="grid grid-cols-2 gap-3">
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Currency</Label>
+                  <Select
+                    value={currency}
+                    onValueChange={(value) => setCurrency(value as CurrencyCode)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SUPPORTED_CURRENCIES.map((code) => (
+                        <SelectItem key={code} value={code}>
+                          {code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="wallet-balance">Starting balance</Label>
+                  <Input
+                    id="wallet-balance"
+                    placeholder="0.00"
+                    inputMode="decimal"
+                    value={initialBalance}
+                    onChange={(e) => setInitialBalance(e.target.value)}
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1.5">
-                <Label>Currency</Label>
+                <Label>Wallet type</Label>
                 <Select
-                  value={currency}
-                  onValueChange={(value) => setCurrency(value as CurrencyCode)}
+                  value={walletType}
+                  onValueChange={(value) => setWalletType(value as WalletType)}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SUPPORTED_CURRENCIES.map((code) => (
-                      <SelectItem key={code} value={code}>
-                        {code}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="standard">Standard</SelectItem>
+                    <SelectItem value="credit">Credit</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="wallet-balance">Starting balance</Label>
-                <Input
-                  id="wallet-balance"
-                  placeholder="0.00"
-                  inputMode="decimal"
-                  value={initialBalance}
-                  onChange={(e) => setInitialBalance(e.target.value)}
-                />
-              </div>
-            </div>
+
+              {walletType === "credit" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="wallet-credit-limit">Credit limit</Label>
+                    <Input
+                      id="wallet-credit-limit"
+                      placeholder="0.00"
+                      inputMode="decimal"
+                      value={creditLimit}
+                      onChange={(e) => setCreditLimit(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="wallet-credit-due-day">Top-up deadline</Label>
+                    <Input
+                      id="wallet-credit-due-day"
+                      type="number"
+                      min={1}
+                      max={31}
+                      placeholder="e.g. 15"
+                      value={creditDueDay}
+                      onChange={(e) => setCreditDueDay(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div className="space-y-1.5">
