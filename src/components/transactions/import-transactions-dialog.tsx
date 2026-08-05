@@ -96,7 +96,6 @@ export function ImportTransactionsDialog({
 
       const splitRegex = new RegExp(`${delimiter}(?=(?:(?:[^"]*"){2})*[^"]*$)`);
 
-      // Look for Monobank header, removing outer quotes if present
       for (let i = 0; i < Math.min(lines.length, 10); i++) {
         let cleanLine = lines[i].trim();
         if (cleanLine.startsWith('"') && cleanLine.endsWith('"')) {
@@ -107,7 +106,6 @@ export function ImportTransactionsDialog({
           c.replace(/^"+|"+$/g, "").replace(/""/g, '"').trim().toLowerCase()
         );
 
-        // Flexible check for Monobank date header
         if (cols[0] && (cols[0].includes("дата") && cols[0].includes("операці"))) {
           headerIndex = i;
           break;
@@ -115,16 +113,16 @@ export function ImportTransactionsDialog({
       }
 
       if (headerIndex === -1) {
-        throw new Error("Invalid CSV format: Could not find the standard Monobank header ('Дата і час операції'). Ensure the file structure is correct.");
+        throw new Error("Invalid CSV format: Could not find the standard Monobank header.");
       }
 
       const transactionsToAdd = [];
+      const seenSignatures = new Set<string>(); // Tracks internal file duplicates
 
       for (let i = headerIndex + 1; i < lines.length; i++) {
         let line = lines[i].trim();
         if (!line) continue;
 
-        // Strip enclosing row-level quotes if Monobank wrapped the whole line
         if (line.startsWith('"') && line.endsWith('"')) {
           line = line.slice(1, -1);
         }
@@ -177,6 +175,15 @@ export function ImportTransactionsDialog({
         if (isNaN(amount) || amount === 0) continue;
 
         const isIncome = amount > 0;
+        const amountMinor = Math.round(Math.abs(amount) * 100);
+
+        // --- INTERNAL FILE DEDUPLICATION SIGNATURE ---
+        // We create a strict signature based on Date, Amount, and Note
+        const signature = `${txDate.getTime()}-${amountMinor}-${note.trim().toLowerCase()}`;
+        if (seenSignatures.has(signature)) {
+          continue; // Skip duplicate row inside the same file
+        }
+        seenSignatures.add(signature);
 
         let matchedCategoryName = MCC_CATEGORY_MAP[mccCode];
 
@@ -188,11 +195,19 @@ export function ImportTransactionsDialog({
           (c) => c.name.toLowerCase() === matchedCategoryName?.toLowerCase()
         );
 
+        // Generate Base64 ID safe for Firestore
+        const rawString = `mono-${signature}`;
+        const customId = btoa(unescape(encodeURIComponent(rawString)))
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
+
         transactionsToAdd.push({
+          id: customId,
           walletId: selectedWalletId,
           categoryId: foundCategory ? foundCategory.id : "",
           type: (isIncome ? "income" : "expense") as "income" | "expense",
-          amountMinor: Math.round(Math.abs(amount) * 100),
+          amountMinor: amountMinor,
           currency: selectedWallet.currency,
           date: txDate,
           note: note,
@@ -200,14 +215,28 @@ export function ImportTransactionsDialog({
       }
 
       if (transactionsToAdd.length === 0) {
-        throw new Error("No valid transactions found. Make sure the columns align with the expected Monobank format.");
+        throw new Error("No valid transactions found.");
       }
+
+      let importedCount = 0;
+      let skippedCount = 0;
 
       for (const tx of transactionsToAdd) {
-        await createTransaction(user.uid, tx);
+        const wasCreated = await createTransaction(user.uid, tx);
+        if (wasCreated) {
+          importedCount++;
+        } else {
+          skippedCount++;
+        }
       }
 
-      toast.success(`Successfully imported ${transactionsToAdd.length} transactions!`);
+      if (importedCount === 0) {
+        toast.info(`No new transactions found. Skipped ${skippedCount} duplicates.`);
+      } else if (skippedCount > 0) {
+        toast.success(`Imported ${importedCount} transactions (${skippedCount} duplicates skipped).`);
+      } else {
+        toast.success(`Successfully imported ${importedCount} transactions!`);
+      }
 
       onSuccess();
       onOpenChange(false);
@@ -243,9 +272,9 @@ export function ImportTransactionsDialog({
               <ul className="list-disc pl-4 space-y-1">
                 <li>Currently, <strong>only Monobank</strong> imports are supported.</li>
                 <li>File must be strictly in <strong>.csv</strong> format.</li>
-                <li>The file structure must match the standard Monobank export (Columns: <em>Дата і час операції, Деталі операції, MCC, Сума в валюті картки (UAH)</em>). Otherwise, it will not work.</li>
+                <li>The file structure must match the standard Monobank export.</li>
               </ul>
-              <p className="font-semibold pt-1 text-blue-700 dark:text-blue-400">Note: Re-importing a file may create duplicate transactions.</p>
+              <p className="font-semibold pt-1 text-emerald-700 dark:text-emerald-400">Note: Existing transactions are automatically skipped using Base64 Hashed IDs.</p>
             </div>
           </div>
 

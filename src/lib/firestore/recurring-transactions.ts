@@ -4,6 +4,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   Timestamp,
   updateDoc,
@@ -113,9 +114,35 @@ export async function setRecurringTransactionActive(
   scheduleId: string,
   isActive: boolean
 ): Promise<void> {
-  await updateDoc(recurringTransactionRef(uid, scheduleId), {
-    isActive,
-    updatedAt: serverTimestamp(),
+  const scheduleRef = recurringTransactionRef(uid, scheduleId);
+
+  if (!isActive) {
+    await updateDoc(scheduleRef, {
+      isActive: false,
+      updatedAt: serverTimestamp(),
+    });
+    return;
+  }
+
+  await runTransaction(db, async (transaction) => {
+    const scheduleSnapshot = await transaction.get(scheduleRef);
+    if (!scheduleSnapshot.exists()) throw new Error("Automatic payment not found");
+
+    const schedule = scheduleSnapshot.data();
+    const now = new Date();
+    let next = schedule.nextRunAt.toDate();
+
+    // Do not create payments for the time a schedule was paused. Resume it at
+    // the next valid occurrence instead of letting the server backfill old ones.
+    while (next <= now) {
+      next = nextRunAt(next, schedule.frequency, schedule.dayOfMonth);
+    }
+
+    transaction.update(scheduleRef, {
+      isActive: true,
+      nextRunAt: Timestamp.fromDate(next),
+      updatedAt: serverTimestamp(),
+    });
   });
 }
 
