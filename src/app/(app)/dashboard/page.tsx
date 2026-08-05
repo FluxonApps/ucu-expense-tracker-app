@@ -554,7 +554,8 @@ const confirmGoalUpdate = async () => {
 
 
   const categoryOf = (id?: string) => categories.find((c) => c.id === id);
-  const walletName = (id: string) => wallets.find((w) => w.id === id)?.name;
+  const walletName = (id: string, storedName?: string) =>
+    wallets.find((w) => w.id === id)?.name ?? storedName ?? "Deleted wallet";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -683,7 +684,20 @@ const confirmGoalUpdate = async () => {
               <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
-                <YAxis tickLine={false} axisLine={false} fontSize={12} width={50} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  width={50}
+                  tickFormatter={(value) =>
+                    Math.abs(value) >= 10000
+                      ? new Intl.NumberFormat("en-US", {
+                          notation: "compact",
+                          maximumFractionDigits: 2,
+                        }).format(value)
+                      : `${value}`
+                  }
+                />
                 <Tooltip
                   formatter={(value, name) => [
                     `${Number(value).toLocaleString("uk-UA")} ${CURRENCY_SYMBOLS[displayCurrency]}`,

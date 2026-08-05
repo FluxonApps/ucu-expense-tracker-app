@@ -6,7 +6,13 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { BudgetGoal, Category, Transaction, Wallet } from "@/lib/types";
+import type {
+  BudgetGoal,
+  Category,
+  RecurringTransaction,
+  Transaction,
+  Wallet,
+} from "@/lib/types";
 
 function converter<T extends { id: string }>(): FirestoreDataConverter<T> {
   return {
@@ -23,6 +29,7 @@ function converter<T extends { id: string }>(): FirestoreDataConverter<T> {
 export const walletConverter = converter<Wallet>();
 export const transactionConverter = converter<Transaction>();
 export const categoryConverter = converter<Category>();
+export const recurringTransactionConverter = converter<RecurringTransaction>();
 export const budgetGoalConverter = converter<BudgetGoal>();
 
 export function walletsRef(uid: string) {
@@ -39,6 +46,18 @@ export function transactionsRef(uid: string) {
 
 export function transactionRef(uid: string, txId: string) {
   return doc(db, "users", uid, "transactions", txId).withConverter(transactionConverter);
+}
+
+export function recurringTransactionsRef(uid: string) {
+  return collection(db, "users", uid, "recurringTransactions").withConverter(
+    recurringTransactionConverter
+  );
+}
+
+export function recurringTransactionRef(uid: string, scheduleId: string) {
+  return doc(db, "users", uid, "recurringTransactions", scheduleId).withConverter(
+    recurringTransactionConverter
+  );
 }
 
 export function categoriesRef(uid: string) {

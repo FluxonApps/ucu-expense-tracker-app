@@ -44,3 +44,7 @@ serviceAccountKey.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+
+/functions/node_modules
