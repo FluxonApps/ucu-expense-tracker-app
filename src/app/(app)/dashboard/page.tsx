@@ -1,5 +1,6 @@
 "use client";
 
+import { CurrencyCard } from "@/components/currency-card";
 import {
   addDays,
   differenceInCalendarDays,
@@ -322,8 +323,8 @@ export default function DashboardPage() {
           value: Math.round(valueMinor / 100),
         };
       })
-        .filter((entry) => entry.value > 0)
-        .sort((a, b) => b.value - a.value);
+      .filter((entry) => entry.value > 0)
+      .sort((a, b) => b.value - a.value);
   }, [monthTxs, categories, toBase]);
 
 // Bars: income vs expenses per month for the last 6 months
@@ -608,7 +609,6 @@ const confirmGoalUpdate = async () => {
         <CurrencySwitcher />
       </div>
 
-
       {ratesError && (
         <div className="flex items-center gap-2 rounded-lg bg-amber-100 px-4 py-3 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-400">
           <AlertTriangle className="size-5 shrink-0" />
@@ -680,393 +680,7 @@ const confirmGoalUpdate = async () => {
         </Card>
       </div>
 
-            {/* Budget goals */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-base">
-              Budget goals
-            </CardTitle>
-
-            <p className="text-sm text-muted-foreground">
-              Track spending limits for selected categories
-            </p>
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={openCreateGoalDialog}
-          >
-            <Plus className="size-4" />
-            Add goal
-          </Button>
-        </CardHeader>
-
-        <CardContent className="space-y-6">
-          {budgetGoals.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No budget goals yet
-            </p>
-          ) : (
-            budgetGoals.map((goal) => {
-              const category = categories.find(
-                (item) => item.id === goal.categoryId
-              );
-
-              if (!category) return null;
-
-              const cycle = getCurrentGoalCycle(goal, now);
-              const cycleEndExclusive = addDays(cycle.cycleEnd, 1);
-
-              const spentMinor = transactions
-                .filter((tx) => {
-                  if (
-                    tx.type !== "expense" ||
-                    tx.categoryId !== goal.categoryId
-                  ) {
-                    return false;
-                  }
-
-                  const transactionDate = tx.date.toDate();
-
-                  return (
-                    transactionDate >= cycle.cycleStart &&
-                    transactionDate < cycleEndExclusive
-                  );
-                })
-                .reduce(
-                  (sum, tx) =>
-                    sum + toBase(tx.amountMinor, tx.currency),
-                  0
-                );
-
-              const percentage = Math.min(
-                (spentMinor / goal.limitMinor) * 100,
-                100
-              );
-
-              const remainingMinor = Math.max(
-                goal.limitMinor - spentMinor,
-                0
-              );
-
-              return (
-                <div key={goal.id} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="size-2.5 rounded-full"
-                        style={{
-                          backgroundColor: category.color,
-                        }}
-                      />
-
-                      <p className="font-medium">
-                        {category.name}
-                      </p>
-                    </div>
-
-                    <p className="text-sm text-muted-foreground">
-                      {Math.round(percentage)}%
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <div className="relative h-10 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${percentage}%`,
-                          backgroundColor: category.color,
-                        }}
-                      />
-
-                      <span className="absolute inset-y-0 left-4 flex items-center text-sm font-medium">
-                        {formatMoney(spentMinor, BASE_CURRENCY)} spent
-                      </span>
-
-                      <span className="absolute inset-y-0 right-4 flex items-center text-sm font-medium">
-                        {formatMoney(remainingMinor, BASE_CURRENCY)} left
-                      </span>
-                    </div>
-
-                    <div className="sm:w-44">
-                      <p
-                        className={cn(
-                          "text-sm",
-                          cycle.isLastDay
-                            ? "font-medium text-destructive"
-                            : "text-muted-foreground"
-                        )}
-                      >
-                        {cycle.isLastDay
-                          ? "Last day"
-                          : `${cycle.daysLeft} day${
-                              cycle.daysLeft === 1 ? "" : "s"
-                            } left`}
-                      </p>
-
-                      <p className="text-xs text-muted-foreground">
-                        Ends {format(cycle.cycleEnd, "d MMM yyyy")}
-                      </p>
-                    </div>
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Actions for ${category.name}`}
-                        >
-                          <MoreVertical className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onSelect={() =>
-                            openEditGoalDialog(goal)
-                          }
-                        >
-                          Edit goal
-                        </DropdownMenuItem>
-
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onSelect={() =>
-                            requestGoalDelete(goal)
-                          }
-                        >
-                          Delete goal
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </CardContent>
-      </Card>
-
-
-      <Dialog
-  open={goalDialogOpen}
-  onOpenChange={(open) => {
-    if (!goalSaving) {
-      setGoalDialogOpen(open);
-    }
-  }}
->
-  <DialogContent>
-    <DialogHeader>
-      <DialogTitle>
-        {editingGoal
-          ? "Edit budget goal"
-          : "Add budget goal"}
-      </DialogTitle>
-
-      <DialogDescription>
-        Choose an expense category, spending limit and deadline.
-      </DialogDescription>
-    </DialogHeader>
-
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="goal-category">
-          Category
-        </Label>
-
-        <Select
-          value={goalCategoryId}
-          onValueChange={setGoalCategoryId}
-        >
-          <SelectTrigger
-            id="goal-category"
-            className="w-full"
-          >
-            <SelectValue placeholder="Choose a category" />
-          </SelectTrigger>
-
-          <SelectContent>
-            {availableGoalCategories.map((category) => (
-              <SelectItem
-                key={category.id}
-                value={category.id}
-              >
-                <span
-                  className="size-2.5 rounded-full"
-                  style={{
-                    backgroundColor: category.color,
-                  }}
-                />
-
-                {category.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="goal-amount">
-          Budget amount, UAH
-        </Label>
-
-        <Input
-          id="goal-amount"
-          type="number"
-          min="0.01"
-          step="0.01"
-          value={goalAmount}
-          onChange={(event) =>
-            setGoalAmount(event.target.value)
-          }
-          placeholder="5000"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="goal-deadline">
-          Deadline
-        </Label>
-
-        <Input
-          id="goal-deadline"
-          type="date"
-          min={format(now, "yyyy-MM-dd")}
-          max={format(addDays(now, 89), "yyyy-MM-dd")}
-          value={goalDeadline}
-          onChange={(event) =>
-            setGoalDeadline(event.target.value)
-          }
-        />
-      </div>
-
-      {goalError && (
-        <p className="text-sm text-destructive">
-          {goalError}
-        </p>
-      )}
-    </div>
-
-    <DialogFooter>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={goalSaving}
-        onClick={() => setGoalDialogOpen(false)}
-      >
-        Cancel
-      </Button>
-
-      <Button
-        type="button"
-        disabled={goalSaving}
-        onClick={
-          editingGoal
-            ? requestGoalUpdate
-            : createGoal
-        }
-      >
-        {goalSaving
-          ? "Saving..."
-          : editingGoal
-            ? "Update goal"
-            : "Create goal"}
-      </Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-
-      <AlertDialog
-  open={editConfirmationOpen}
-  onOpenChange={setEditConfirmationOpen}
->
-  <AlertDialogContent>
-    <AlertDialogHeader>
-      <AlertDialogTitle>
-        Change this budget goal?
-      </AlertDialogTitle>
-
-      <AlertDialogDescription>
-        The current cycle will end. A new repeating cycle
-        will start today with the selected category,
-        amount and deadline.
-      </AlertDialogDescription>
-    </AlertDialogHeader>
-
-    <AlertDialogFooter>
-      <AlertDialogCancel disabled={goalSaving}>
-        Cancel
-      </AlertDialogCancel>
-
-      <AlertDialogAction
-        disabled={goalSaving}
-        onClick={(event) => {
-          event.preventDefault();
-          void confirmGoalUpdate();
-        }}
-      >
-        {goalSaving
-          ? "Saving..."
-          : "Confirm changes"}
-      </AlertDialogAction>
-    </AlertDialogFooter>
-  </AlertDialogContent>
-</AlertDialog>
-
-            {/* Confirmation before deleting a budget goal */}
-      <AlertDialog
-        open={deleteConfirmationOpen}
-        onOpenChange={(open) => {
-          // Не дозволяємо закрити вікно під час видалення.
-          if (goalSaving) return;
-
-          setDeleteConfirmationOpen(open);
-
-          // Якщо користувач натиснув Cancel або закрив вікно,
-          // більше не зберігаємо вибрану для видалення ціль.
-          if (!open) {
-            setGoalToDelete(null);
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete this budget goal?
-            </AlertDialogTitle>
-
-            <AlertDialogDescription>
-              This will permanently remove the budget goal.
-              The category and its transactions will not be deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={goalSaving}>
-              Cancel
-            </AlertDialogCancel>
-
-            <AlertDialogAction
-              disabled={goalSaving}
-              onClick={(event) => {
-                // Не закриваємо AlertDialog раніше,
-                // ніж завершиться запит до Firestore.
-                event.preventDefault();
-                void confirmGoalDelete();
-              }}
-            >
-              {goalSaving ? "Deleting..." : "Delete goal"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
+      {/* Верхні графіки */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -1126,7 +740,20 @@ const confirmGoalUpdate = async () => {
               <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
-                <YAxis tickLine={false} axisLine={false} fontSize={12} width={50} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  width={50}
+                  tickFormatter={(value) =>
+                    Math.abs(value) >= 10000
+                      ? new Intl.NumberFormat("en-US", {
+                          notation: "compact",
+                          maximumFractionDigits: 2,
+                        }).format(value)
+                      : `${value}`
+                  }
+                />
                 <Tooltip
                   formatter={(value, name) => [
                     `${Number(value).toLocaleString("uk-UA")} ${CURRENCY_SYMBOLS[displayCurrency]}`,
@@ -1141,6 +768,7 @@ const confirmGoalUpdate = async () => {
         </Card>
       </div>
 
+      {/* Нижні картки: Daily spending, Currency rates & Recent transactions */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -1161,85 +789,85 @@ const confirmGoalUpdate = async () => {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-base">Recent transactions</CardTitle>
-            <Link
-              href="/transactions"
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
-              View all
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {recentTxs.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No transactions yet
-              </p>
-            ) : (
-              recentTxs.map((tx) => {
-                const category = categoryOf(tx.categoryId);
-                return (
-                  <div key={tx.id} className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-full",
-                        tx.type === "income" &&
-                          "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400",
-                        tx.type === "expense" &&
-                          "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
-                        tx.type === "transfer" && "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {tx.type === "income" ? (
-                        <ArrowDownLeft className="size-4" />
-                      ) : tx.type === "expense" ? (
-                        <ArrowUpRight className="size-4" />
-                      ) : (
-                        <ArrowLeftRight className="size-4" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {tx.type === "transfer"
-                          ? `${walletName(tx.walletId, tx.walletName)} → ${walletName(
-                              tx.toWalletId ?? "",
-                              tx.toWalletName
-                            )}`
-                          : tx.note || category?.name || "Transaction"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(tx.date.toDate(), "d MMM")}
-                        {tx.type !== "transfer" && category ? (
-                          <> · {category.name}</>
-                        ) : null}
-                      </p>
-                    </div>
-                    {tx.type !== "transfer" && category && (
-                      <Badge variant="outline" className="hidden gap-1 sm:inline-flex">
-                        <span style={{ color: category.color }}>
-                          <AppIcon name={category.icon} className="size-3" />
-                        </span>
-                        {category.name}
-                      </Badge>
-                    )}
-                    <span
-                      className={cn(
-                        "shrink-0 text-sm font-medium tabular-nums",
-                        tx.type === "income" && "text-green-600 dark:text-green-500",
-                        tx.type === "expense" && "text-red-600 dark:text-red-500"
-                      )}
-                    >
-                      {tx.type === "expense" ? "-" : tx.type === "income" ? "+" : ""}
-                      {formatMoney(tx.amountMinor, tx.currency)}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
+        <CurrencyCard />
       </div>
+
+      {/* Картка останніх транзакцій */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle className="text-base">Recent transactions</CardTitle>
+          <Link
+            href="/transactions"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            View all
+          </Link>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {recentTxs.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No transactions yet
+            </p>
+          ) : (
+            recentTxs.map((tx) => {
+              const category = categoryOf(tx.categoryId);
+              return (
+                <div key={tx.id} className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-full",
+                      tx.type === "income" &&
+                        "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400",
+                      tx.type === "expense" &&
+                        "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+                      tx.type === "transfer" && "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {tx.type === "income" ? (
+                      <ArrowDownLeft className="size-4" />
+                    ) : tx.type === "expense" ? (
+                      <ArrowUpRight className="size-4" />
+                    ) : (
+                      <ArrowLeftRight className="size-4" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {tx.type === "transfer"
+                        ? `${walletName(tx.walletId)} → ${walletName(tx.toWalletId ?? "")}`
+                        : tx.note || category?.name || "Transaction"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(tx.date.toDate(), "d MMM")}
+                      {tx.type !== "transfer" && category ? (
+                        <> · {category.name}</>
+                      ) : null}
+                    </p>
+                  </div>
+                  {tx.type !== "transfer" && category && (
+                    <Badge variant="outline" className="hidden gap-1 sm:inline-flex">
+                      <span style={{ color: category.color }}>
+                        <AppIcon name={category.icon} className="size-3" />
+                      </span>
+                      {category.name}
+                    </Badge>
+                  )}
+                  <span
+                    className={cn(
+                      "shrink-0 text-sm font-medium tabular-nums",
+                      tx.type === "income" && "text-green-600 dark:text-green-500",
+                      tx.type === "expense" && "text-red-600 dark:text-red-500"
+                    )}
+                  >
+                    {tx.type === "expense" ? "-" : tx.type === "income" ? "+" : ""}
+                    {formatMoney(tx.amountMinor, tx.currency)}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

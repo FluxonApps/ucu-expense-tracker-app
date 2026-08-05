@@ -22,6 +22,8 @@ import { useAuth } from "@/components/auth-provider";
 import { useData } from "@/components/data-provider";
 import { AppIcon } from "@/components/icons";
 import { TransactionFormDialog } from "@/components/transactions/transaction-form-dialog";
+import { ImportTransactionsDialog } from "@/components/transactions/import-transactions-dialog";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,7 +79,7 @@ import {
 import {
   deleteRecurringTransaction,
   setRecurringTransactionActive,
-  subscribeToRecurringTransactions,
+    subscribeToRecurringTransactions,
 } from "@/lib/firestore/recurring-transactions";
 import type { RecurringTransaction, Transaction, TransactionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -138,6 +140,8 @@ export default function TransactionsPage() {
     searchParams.get("category") ?? readStored("tx:category") ?? ALL);
   const [filterType, setFilterType] = useState(
     searchParams.get("type") ?? readStored("tx:type") ?? ALL);
+  const [filterPayment, setFilterPayment] = useState(
+    searchParams.get("payment") ?? readStored("tx:payment") ?? ALL);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(() => {
     const v = searchParams.get("from") ?? readStored("tx:from");
     return v ? new Date(v) : undefined;
@@ -193,11 +197,22 @@ export default function TransactionsPage() {
     loadFirstPage();
   }, [loadFirstPage]);
 
+  // Keep automatic-payment schedules in sync with Firestore so they can be
+  // shown in both the "All payments" and "Automatic" views.
+  useEffect(() => {
+    if (!user) {
+      setRecurringTransactions([]);
+      return;
+    }
+    return subscribeToRecurringTransactions(user.uid, setRecurringTransactions);
+  }, [user]);
+
   useEffect(() => {
     const params = new URLSearchParams();
     if (filterWallet !== ALL) params.set("wallet", filterWallet);
     if (filterCategory !== ALL) params.set("category", filterCategory);
     if (filterType !== ALL) params.set("type", filterType);
+    if (filterPayment !== ALL) params.set("payment", filterPayment);
     if (dateFrom) params.set("from", dateFrom.toISOString().slice(0, 10));
     if (dateTo) params.set("to", dateTo.toISOString().slice(0, 10));
 
@@ -207,11 +222,13 @@ export default function TransactionsPage() {
     sessionStorage.setItem("tx:wallet", filterWallet);
     sessionStorage.setItem("tx:category", filterCategory);
     sessionStorage.setItem("tx:type", filterType);
+    sessionStorage.setItem("tx:payment", filterPayment);
     if (dateFrom) sessionStorage.setItem("tx:from", dateFrom.toISOString().slice(0, 10));
     else sessionStorage.removeItem("tx:from");
     if (dateTo) sessionStorage.setItem("tx:to", dateTo.toISOString().slice(0, 10));
     else sessionStorage.removeItem("tx:to");
-  }, [filterWallet, filterCategory, filterType, dateFrom, dateTo, pathname, router]);
+  }, [filterWallet, filterCategory, filterType, filterPayment, dateFrom, dateTo, pathname, router]);
+
   const loadMore = async () => {
     if (!user || !cursor) return;
     setLoadingMore(true);
@@ -318,16 +335,23 @@ export default function TransactionsPage() {
             All income, expenses, and transfers
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditingTx(null);
-            setEditingRecurringTx(null);
-            setFormOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Add transaction
-        </Button>
+        {/* IMPORT & ADD TRANSACTION BUTTONS */}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Download className="size-4" />
+            Import transactions
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingTx(null);
+              setEditingRecurringTx(null);
+              setFormOpen(true);
+            }}
+          >
+            <Plus className="size-4" />
+            Add transaction
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -712,25 +736,12 @@ export default function TransactionsPage() {
         onSaved={loadFirstPage}
       />
 
-      {/* Import Transactions Modal Placeholder */}
-      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Import Transactions</DialogTitle>
-            <DialogDescription>
-              Import transactions directly from your banking application or file.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-8 text-center text-sm text-muted-foreground border-2 border-dashed rounded-lg">
-            Import functionality will be implemented here.
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Import Transactions Modal */}
+      <ImportTransactionsDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onSuccess={loadFirstPage}
+      />
 
       <AlertDialog
         open={Boolean(deletingTx)}
