@@ -133,7 +133,9 @@ export default function TransactionsPage() {
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editingRecurringTx, setEditingRecurringTx] = useState<RecurringTransaction | null>(null);
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
+  const [deletingSchedule, setDeletingSchedule] = useState<RecurringTransaction | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deletingSchedulePending, setDeletingSchedulePending] = useState(false);
 
   const buildFilters = useCallback((): TransactionFilters => {
     return {
@@ -216,14 +218,18 @@ export default function TransactionsPage() {
     }
   };
 
-  const handleScheduleDelete = async (schedule: RecurringTransaction) => {
-    if (!user) return;
+  const handleScheduleDelete = async () => {
+    if (!user || !deletingSchedule) return;
+    setDeletingSchedulePending(true);
     try {
-      await deleteRecurringTransaction(user.uid, schedule.id);
+      await deleteRecurringTransaction(user.uid, deletingSchedule.id);
       toast.success("Automatic payment deleted");
+      setDeletingSchedule(null);
     } catch (error) {
       console.error(error);
       toast.error("Failed to delete the automatic payment");
+    } finally {
+      setDeletingSchedulePending(false);
     }
   };
 
@@ -247,6 +253,24 @@ export default function TransactionsPage() {
   const walletName = (id: string, storedName?: string) =>
     wallets.find((w) => w.id === id)?.name ?? storedName ?? "Deleted wallet";
   const categoryOf = (id?: string) => categories.find((c) => c.id === id);
+  const recurringDateTo = dateTo ? new Date(dateTo) : undefined;
+  recurringDateTo?.setHours(23, 59, 59, 999);
+  const visibleRecurringTransactions = recurringTransactions.filter((schedule) => {
+    const nextPaymentDate = schedule.nextRunAt.toDate();
+    return (
+      (filterWallet === ALL || schedule.walletId === filterWallet) &&
+      (filterCategory === ALL || schedule.categoryId === filterCategory) &&
+      (filterType === ALL || schedule.type === filterType) &&
+      (!dateFrom || nextPaymentDate >= dateFrom) &&
+      (!recurringDateTo || nextPaymentDate <= recurringDateTo)
+    );
+  });
+  const visibleTransactions = transactions.filter(
+    (tx) => filterPayment !== ONE_TIME || !tx.isAutomatic
+  );
+  const hasVisiblePayments =
+    visibleTransactions.length > 0 ||
+    (filterPayment === ALL && visibleRecurringTransactions.length > 0);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -335,7 +359,7 @@ export default function TransactionsPage() {
       {filterPayment === AUTOMATIC ? (
         <Card className="py-0">
           <CardContent className="p-0">
-            {recurringTransactions.length === 0 ? (
+            {visibleRecurringTransactions.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-16 text-center">
                 <p className="font-medium">No automatic payments found</p>
                 <p className="text-sm text-muted-foreground">
@@ -355,7 +379,7 @@ export default function TransactionsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recurringTransactions.map((schedule) => (
+                  {visibleRecurringTransactions.map((schedule) => (
                     <TableRow key={schedule.id} className={!schedule.isActive ? "opacity-60" : ""}>
                       <TableCell>
                         <Badge variant={schedule.isActive ? "secondary" : "outline"}>
@@ -406,7 +430,7 @@ export default function TransactionsPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               variant="destructive"
-                              onClick={() => handleScheduleDelete(schedule)}
+                              onClick={() => setDeletingSchedule(schedule)}
                             >
                               <Trash2 className="size-4" />
                               Delete
@@ -430,7 +454,7 @@ export default function TransactionsPage() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          ) : transactions.length === 0 ? (
+          ) : !hasVisiblePayments ? (
             <div className="flex flex-col items-center gap-2 py-16 text-center">
               <p className="font-medium">No transactions found</p>
               <p className="text-sm text-muted-foreground">
@@ -452,9 +476,95 @@ export default function TransactionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactions
-                  .filter((tx) => filterPayment !== ONE_TIME || !tx.isAutomatic)
-                  .map((tx) => {
+                {filterPayment === ALL &&
+                  visibleRecurringTransactions.map((schedule) => {
+                    const category = categoryOf(schedule.categoryId);
+                    return (
+                      <TableRow
+                        key={`schedule-${schedule.id}`}
+                        className={cn("bg-muted/20", !schedule.isActive && "opacity-60")}
+                      >
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          <div>{format(schedule.nextRunAt.toDate(), "yyyy-MM-dd")}</div>
+                          <span className="text-xs">Next automatic payment</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge variant="secondary">Automatic</Badge>
+                            {category ? (
+                              <Badge
+                                variant="outline"
+                                className="gap-1.5"
+                                style={{ borderColor: `${category.color}66` }}
+                              >
+                                <span style={{ color: category.color }}>
+                                  <AppIcon name={category.icon} className="size-3" />
+                                </span>
+                                {category.name}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-48 truncate">
+                          {schedule.note || <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {walletName(schedule.walletId, schedule.walletName)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span
+                            className={cn(
+                              "font-medium tabular-nums",
+                              schedule.type === "income"
+                                ? "text-green-600 dark:text-green-500"
+                                : "text-red-600 dark:text-red-500"
+                            )}
+                          >
+                            {schedule.type === "income" ? "+" : "-"}
+                            {formatMoney(schedule.amountMinor, schedule.currency)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="size-7">
+                                <MoreVertical className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditingTx(null);
+                                  setEditingRecurringTx(schedule);
+                                  setFormOpen(true);
+                                }}
+                              >
+                                <Pencil className="size-4" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleScheduleActive(schedule)}>
+                                {schedule.isActive ? (
+                                  <Pause className="size-4" />
+                                ) : (
+                                  <Play className="size-4" />
+                                )}
+                                {schedule.isActive ? "Pause" : "Resume"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => setDeletingSchedule(schedule)}
+                              >
+                                <Trash2 className="size-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+
+                {visibleTransactions.map((tx) => {
                   const category = categoryOf(tx.categoryId);
                   return (
                     <TableRow key={tx.id}>
@@ -588,6 +698,33 @@ export default function TransactionsPage() {
               className="bg-destructive text-white hover:bg-destructive/90"
             >
               {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(deletingSchedule)}
+        onOpenChange={(open) => !open && setDeletingSchedule(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this automatic payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Future payments will stop. Past transactions will remain in history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingSchedulePending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleScheduleDelete();
+              }}
+              disabled={deletingSchedulePending}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {deletingSchedulePending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

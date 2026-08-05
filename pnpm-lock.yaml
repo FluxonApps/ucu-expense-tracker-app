@@ -97,6 +97,16 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  functions:
+    dependencies:
+      firebase-admin:
+        specifier: ^14.2.0
+        version: 14.2.0(@firebase/app-compat@0.5.16)(@firebase/app@0.16.0)(supports-color@7.2.0)
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
 packages:
 
   '@alloc/quick-lru@5.2.0':

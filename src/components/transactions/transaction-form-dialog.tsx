@@ -219,6 +219,13 @@ export function TransactionFormDialog({
     e.preventDefault();
     if (!user) return;
 
+    // A recurring payment is edited as a schedule. It must not silently turn
+    // into a separate one-time transaction while leaving the old schedule on.
+    if (isEditingRecurring && paymentFrequency === "one-time") {
+      toast.error("An automatic payment cannot be changed to one-time here.");
+      return;
+    }
+
     if (amountMinor === null || amountMinor <= 0) {
       toast.error("Amount must be greater than zero");
       return;
@@ -428,7 +435,9 @@ export function TransactionFormDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PAYMENT_FREQUENCY_OPTIONS.map((option) => (
+                    {PAYMENT_FREQUENCY_OPTIONS.filter(
+                      (option) => !isEditingRecurring || option.value !== "one-time"
+                    ).map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>
