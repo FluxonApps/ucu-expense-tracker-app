@@ -175,14 +175,13 @@ export default function DashboardPage() {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    // Refresh the current date regularly so a new cycle
-    // begins automatically even when the page stays open.
-    const timer = window.setInterval(() => {
-      setNow(new Date());
-    }, 60_000);
+  const timer = window.setInterval(() => {
+    setNow(new Date());
+  }, 24 * 60 * 60 * 1000);
 
-    return () => window.clearInterval(timer);
-  }, []);
+  return () => window.clearInterval(timer);
+}, []);
+
   const rangeStart = useMemo(() => startOfMonth(subMonths(now, 5)), [now]);
   const rangeEnd = useMemo(() => endOfMonth(now), [now]);
 
@@ -367,7 +366,7 @@ export default function DashboardPage() {
     setGoalAmount((goal.limitMinor / 100).toString());
 
     // HTML input type="date" потребує формат yyyy-MM-dd.
-    setGoalDeadline(format(cycle.cycleEnd, "yyyy-MM-dd"));
+    setGoalDeadline(format(addDays(now, goal.periodDays - 1), "yyyy-MM-dd"));
 
     setGoalError(null);
     setGoalDialogOpen(true);
@@ -871,6 +870,7 @@ const confirmGoalUpdate = async () => {
           id="goal-deadline"
           type="date"
           min={format(now, "yyyy-MM-dd")}
+          max={format(addDays(now, 89), "yyyy-MM-dd")}
           value={goalDeadline}
           onChange={(event) =>
             setGoalDeadline(event.target.value)
@@ -907,7 +907,7 @@ const confirmGoalUpdate = async () => {
         {goalSaving
           ? "Saving..."
           : editingGoal
-            ? "Review changes"
+            ? "Update goal"
             : "Create goal"}
       </Button>
     </DialogFooter>
