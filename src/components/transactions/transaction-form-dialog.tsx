@@ -35,16 +35,36 @@ import {
   createTransfer,
   updateTransaction,
 } from "@/lib/firestore/transactions";
-import type { CurrencyCode, Transaction } from "@/lib/types";
+import {
+  createRecurringTransaction,
+  updateRecurringTransaction,
+} from "@/lib/firestore/recurring-transactions";
+import type {
+  CurrencyCode,
+  PaymentFrequency,
+  RecurringTransaction,
+  Transaction,
+} from "@/lib/types";
 import { convertMinor, useCurrencyRates } from "@/lib/use-currency-rates";
 
 type FormType = "expense" | "income" | "transfer";
+type PaymentFrequencyValue = "one-time" | PaymentFrequency;
+
+const PAYMENT_FREQUENCY_OPTIONS: Array<{ value: PaymentFrequencyValue; label: string }> = [
+  { value: "one-time", label: "One-time" },
+  { value: "monthly", label: "Monthly" },
+  { value: "everyTwoMonths", label: "Every 2 months" },
+  { value: "semiannual", label: "Every 6 months" },
+  { value: "yearly", label: "Yearly" },
+];
 
 interface TransactionFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** When set, the dialog edits this transaction (income/expense only). */
   transaction?: Transaction | null;
+  /** When set, the dialog edits this automatic-payment schedule. */
+  recurringTransaction?: RecurringTransaction | null;
   /** Called after a successful create/update so lists can refresh. */
   onSaved?: () => void;
 }
@@ -53,12 +73,15 @@ export function TransactionFormDialog({
   open,
   onOpenChange,
   transaction,
+  recurringTransaction,
   onSaved,
 }: TransactionFormDialogProps) {
   const { user } = useAuth();
   const { wallets, categories } = useData();
   const { rates, loading: ratesLoading, error: ratesError } = useCurrencyRates();
-  const isEdit = Boolean(transaction);
+  const isEditingTransaction = Boolean(transaction);
+  const isEditingRecurring = Boolean(recurringTransaction);
+  const isEdit = isEditingTransaction || isEditingRecurring;
 
   const [type, setType] = useState<FormType>("expense");
   const [amount, setAmount] = useState("");
@@ -68,6 +91,9 @@ export function TransactionFormDialog({
   const [categoryId, setCategoryId] = useState("");
   const [date, setDate] = useState<Date>(new Date());
   const [note, setNote] = useState("");
+  const [paymentFrequency, setPaymentFrequency] =
+    useState<PaymentFrequencyValue>("one-time");
+  const [paymentDay, setPaymentDay] = useState("1");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -83,6 +109,19 @@ export function TransactionFormDialog({
       setCategoryId(transaction.categoryId ?? "");
       setDate(transaction.date.toDate());
       setNote(transaction.note);
+      setPaymentFrequency("one-time");
+      setPaymentDay(String(transaction.date.toDate().getDate()));
+    } else if (recurringTransaction) {
+      setType(recurringTransaction.type);
+      setAmount((recurringTransaction.amountMinor / 100).toFixed(2));
+      setWalletId(recurringTransaction.walletId);
+      setToWalletId("");
+      setToAmount("");
+      setCategoryId(recurringTransaction.categoryId);
+      setDate(recurringTransaction.nextRunAt.toDate());
+      setNote(recurringTransaction.note);
+      setPaymentFrequency(recurringTransaction.frequency);
+      setPaymentDay(String(recurringTransaction.dayOfMonth));
     } else {
       setType("expense");
       setAmount("");
@@ -92,8 +131,10 @@ export function TransactionFormDialog({
       setCategoryId("");
       setDate(new Date());
       setNote("");
+      setPaymentFrequency("one-time");
+      setPaymentDay(String(new Date().getDate()));
     }
-  }, [open, transaction, wallets]);
+  }, [open, transaction, recurringTransaction, wallets]);
 
   const fromWallet = wallets.find((w) => w.id === walletId);
   const toWallet = wallets.find((w) => w.id === toWalletId);
@@ -169,9 +210,21 @@ export function TransactionFormDialog({
     );
   }
 
+  function handleTypeChange(nextType: FormType) {
+    setType(nextType);
+    if (nextType === "transfer") setPaymentFrequency("one-time");
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    // A recurring payment is edited as a schedule. It must not silently turn
+    // into a separate one-time transaction while leaving the old schedule on.
+    if (isEditingRecurring && paymentFrequency === "one-time") {
+      toast.error("An automatic payment cannot be changed to one-time here.");
+      return;
+    }
 
     if (amountMinor === null || amountMinor <= 0) {
       toast.error("Amount must be greater than zero");
@@ -188,7 +241,12 @@ export function TransactionFormDialog({
         ? fromWallet!.balanceMinor + transaction.amountMinor
         : fromWallet?.balanceMinor ?? 0;
 
-    if (type !== "income" && fromWallet && amountMinor > effectiveBalance) {
+    if (
+      paymentFrequency === "one-time" &&
+      type !== "income" &&
+      fromWallet &&
+      amountMinor > effectiveBalance
+    ) {
       toast.error("Insufficient funds in this wallet");
       return;
     }
@@ -235,6 +293,45 @@ export function TransactionFormDialog({
       return;
     }
 
+    if (paymentFrequency !== "one-time") {
+      const dayOfMonth = Number(paymentDay);
+      if (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) {
+        toast.error("Please choose a payment day from 1 to 31");
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        const input = {
+          type,
+          amountMinor,
+          currency: fromWallet!.currency,
+          walletId,
+          walletName: fromWallet!.name,
+          categoryId,
+          note: note.trim(),
+          frequency: paymentFrequency,
+          dayOfMonth,
+          startDate: date,
+        };
+        if (recurringTransaction) {
+          await updateRecurringTransaction(user.uid, recurringTransaction.id, input);
+          toast.success("Automatic payment updated");
+        } else {
+          await createRecurringTransaction(user.uid, input);
+          toast.success("Automatic payment scheduled");
+        }
+        onOpenChange(false);
+        onSaved?.();
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to save the automatic payment");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     setSubmitting(true);
     try {
       const input = {
@@ -277,7 +374,7 @@ export function TransactionFormDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isEdit && (
-            <Tabs value={type} onValueChange={(value) => setType(value as FormType)}>
+            <Tabs value={type} onValueChange={(value) => handleTypeChange(value as FormType)}>
               <TabsList className="w-full">
                 <TabsTrigger value="expense" className="flex-1">
                   Expense
@@ -306,7 +403,7 @@ export function TransactionFormDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Date</Label>
+              <Label>{paymentFrequency === "one-time" ? "Date" : "First payment date"}</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start font-normal">
@@ -324,6 +421,56 @@ export function TransactionFormDialog({
               </Popover>
             </div>
           </div>
+
+          {!isEditingTransaction && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Payment frequency</Label>
+                <Select
+                  value={paymentFrequency}
+                  onValueChange={(value) => setPaymentFrequency(value as PaymentFrequencyValue)}
+                  disabled={type === "transfer"}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_FREQUENCY_OPTIONS.filter(
+                      (option) => !isEditingRecurring || option.value !== "one-time"
+                    ).map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {type === "transfer" && (
+                  <p className="text-xs text-muted-foreground">Transfers can only be one-time.</p>
+                )}
+              </div>
+
+              {paymentFrequency !== "one-time" && (
+                <div className="space-y-1.5">
+                  <Label>Payment day</Label>
+                  <Select value={paymentDay} onValueChange={setPaymentDay}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 31 }, (_, index) => String(index + 1)).map((day) => (
+                        <SelectItem key={day} value={day}>
+                          {day}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Uses the last day when a month is shorter.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>{type === "transfer" ? "From wallet" : "Wallet"}</Label>
@@ -436,7 +583,13 @@ export function TransactionFormDialog({
               Cancel
             </Button>
             <Button type="submit">
-              {isEdit ? "Save changes" : type === "transfer" ? "Transfer" : "Add"}
+              {isEdit
+                ? "Save changes"
+                : paymentFrequency !== "one-time"
+                  ? "Schedule payment"
+                  : type === "transfer"
+                    ? "Transfer"
+                    : "Add"}
             </Button>
           </DialogFooter>
         </form>
