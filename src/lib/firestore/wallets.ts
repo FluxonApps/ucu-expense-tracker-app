@@ -67,16 +67,35 @@ export async function createWallet(uid: string, input: WalletInput): Promise<str
   return ref.id;
 }
 
+export interface WalletUpdateInput extends Pick<WalletInput, "name" | "icon" | "color"> {
+  /** Only provided when editing a credit wallet's limit. */
+  creditLimitMinor?: number;
+  /** Only provided when editing a credit wallet's top-up deadline. */
+  creditDueDay?: number;
+  /** Recomputed available balance, sent when creditLimitMinor changes. */
+  balanceMinor?: number;
+}
+
 export async function updateWallet(
   uid: string,
   walletId: string,
-  input: Pick<WalletInput, "name" | "icon" | "color">
+  input: WalletUpdateInput
 ): Promise<void> {
-  await updateDoc(walletRef(uid, walletId), {
+  const updates: Record<string, unknown> = {
     name: input.name,
     icon: input.icon,
     color: input.color,
-  });
+  };
+  if (input.creditLimitMinor !== undefined) {
+    updates.creditLimitMinor = input.creditLimitMinor;
+  }
+  if (input.creditDueDay !== undefined) {
+    updates.creditDueDay = input.creditDueDay;
+  }
+  if (input.balanceMinor !== undefined) {
+    updates.balanceMinor = input.balanceMinor;
+  }
+  await updateDoc(walletRef(uid, walletId), updates);
 }
 
 export async function deleteWallet(uid: string, walletId: string): Promise<void> {

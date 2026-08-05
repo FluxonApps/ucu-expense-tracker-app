@@ -1,5 +1,6 @@
 "use client";
 
+import { format as formatDate } from "date-fns";
 import { MoreVertical, Pencil, Plus, Trash2, Wallet as WalletIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -29,7 +30,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatMoney } from "@/lib/currencies";
 import { deleteWallet } from "@/lib/firestore/wallets";
 import type { Wallet } from "@/lib/types";
-import { cn } from "@/lib/utils";
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+/** Next occurrence of `dueDay`, clamped to shorter months (e.g. day 31 in Feb). */
+function getNextDueDate(dueDay: number, from = new Date()): Date {
+  const clampedThisMonth = Math.min(dueDay, daysInMonth(from.getFullYear(), from.getMonth()));
+  const thisMonthDue = new Date(from.getFullYear(), from.getMonth(), clampedThisMonth);
+  if (thisMonthDue >= from) return thisMonthDue;
+
+  const nextMonth = from.getMonth() + 1;
+  const clampedNextMonth = Math.min(dueDay, daysInMonth(from.getFullYear(), nextMonth));
+  return new Date(from.getFullYear(), nextMonth, clampedNextMonth);
+}
 
 export default function WalletsPage() {
   const { user } = useAuth();
@@ -109,10 +124,7 @@ export default function WalletsPage() {
           {wallets.map((wallet) => (
             <Card
               key={wallet.id}
-              className={cn(
-                "relative overflow-hidden bg-white text-neutral-900",
-                wallet.walletType === "credit" && "border-2 border-dashed border-neutral-300"
-              )}
+              className="relative overflow-hidden bg-white text-neutral-900"
             >
               <div
                 className="absolute inset-y-0 left-0 w-1.5"
@@ -139,6 +151,16 @@ export default function WalletsPage() {
                     <p className="mt-2 text-xl font-semibold tabular-nums">
                       {formatMoney(wallet.balanceMinor, wallet.currency)}
                     </p>
+                    {wallet.walletType === "credit" && wallet.creditDueDay && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        You owe{" "}
+                        {formatMoney(
+                          Math.max(0, (wallet.creditLimitMinor ?? 0) - wallet.balanceMinor),
+                          wallet.currency
+                        )}{" "}
+                        till {formatDate(getNextDueDate(wallet.creditDueDay), "d MMMM")}.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <DropdownMenu>
