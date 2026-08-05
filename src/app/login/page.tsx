@@ -1,7 +1,7 @@
 "use client";
 
 import { FirebaseError } from "firebase/app";
-import { WalletMinimal } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -112,8 +112,14 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <WalletMinimal className="size-6" />
+          <div className="relative mx-auto mb-2 flex h-11 w-11 items-center justify-center overflow-hidden rounded-lg bg-white shadow-sm">
+            <Image
+              src="/logo.png"
+              alt="Spendly Logo"
+              width={44}
+              height={44}
+              className="h-full w-full object-cover scale-[1.35]"
+            />
           </div>
           <CardTitle className="text-2xl">Spendly</CardTitle>
           <CardDescription>Track your money across wallets and currencies</CardDescription>

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   ArrowLeftRight,
   LayoutDashboard,
@@ -7,7 +8,6 @@ import {
   Moon,
   Sun,
   Wallet,
-  WalletMinimal,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -67,11 +67,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-56 shrink-0 flex-col border-r bg-sidebar md:flex">
-        <div className="flex h-14 items-center gap-2 border-b px-4">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <WalletMinimal className="size-4" />
+        <div className="flex h-14 items-center gap-3 border-b px-4">
+          <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-white shadow-sm">
+            <Image
+              src="/logo.png"
+              alt="Spendly Logo"
+              width={32}
+              height={32}
+              className="h-full w-full object-cover scale-[1.35]"
+            />
           </div>
-          <span className="font-semibold">Spendly</span>
+          <span className="font-semibold text-lg tracking-tight">Spendly</span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {NAV_ITEMS.map((item) => {
