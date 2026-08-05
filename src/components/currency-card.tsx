@@ -45,13 +45,13 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="rounded-lg border border-neutral-700 bg-neutral-900/95 p-2 shadow-xl backdrop-blur-md text-xs space-y-1">
-        <p className="font-semibold text-neutral-300 border-b border-neutral-800 pb-1 mb-1">
+      <div className="rounded-lg border border-border bg-popover p-2 shadow-md text-xs space-y-1 text-popover-foreground">
+        <p className="font-semibold text-muted-foreground border-b border-border pb-1 mb-1">
           {data.day}
         </p>
         <div className="flex items-center gap-2">
-          <span className="text-neutral-400">
-            NBU Rate: <b className="text-emerald-400 font-semibold">{data.rate.toFixed(2)} ₴</b>
+          <span className="text-muted-foreground">
+            NBU Rate: <b className="text-emerald-600 dark:text-emerald-400 font-semibold">{data.rate.toFixed(2)} ₴</b>
           </span>
         </div>
       </div>
@@ -127,27 +127,27 @@ export function CurrencyCard() {
   const outputCurrency = convertDirection === "TO_UAH" ? "UAH" : selectedCurrency;
 
   return (
-    <Card className="border-neutral-800 bg-neutral-900 text-white shadow-xl">
+    <Card className="border-border bg-card text-card-foreground shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <div>
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             {CURRENCY_FLAGS[selectedCurrency]} Exchange Rates
           </CardTitle>
-          <p className="text-xs text-neutral-400 flex items-center gap-1 mt-0.5">
-            <RefreshCw className="size-3 text-neutral-500 animate-spin-slow" />
+          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+            <RefreshCw className="size-3 text-muted-foreground animate-spin-slow" />
             Monobank / NBU API (UAH)
           </p>
         </div>
 
         <Tabs value={selectedCurrency} onValueChange={(v) => setSelectedCurrency(v as any)}>
-          <TabsList className="bg-neutral-800 border border-neutral-700/80 p-0.5">
-            <TabsTrigger value="USD" className="text-xs flex items-center gap-1.5 data-[state=active]:bg-neutral-700">
+          <TabsList className="bg-muted border border-border p-0.5">
+            <TabsTrigger value="USD" className="text-xs flex items-center gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground">
               <FlagUSD /> USD
             </TabsTrigger>
-            <TabsTrigger value="EUR" className="text-xs flex items-center gap-1.5 data-[state=active]:bg-neutral-700">
+            <TabsTrigger value="EUR" className="text-xs flex items-center gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground">
               <FlagEUR /> EUR
             </TabsTrigger>
-            <TabsTrigger value="PLN" className="text-xs flex items-center gap-1.5 data-[state=active]:bg-neutral-700">
+            <TabsTrigger value="PLN" className="text-xs flex items-center gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground">
               <FlagPLN /> PLN
             </TabsTrigger>
           </TabsList>
@@ -155,30 +155,30 @@ export function CurrencyCard() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center rounded-xl bg-neutral-800/40 p-3.5 border border-neutral-800/80">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center rounded-xl bg-muted/40 p-3.5 border border-border">
           <div className="space-y-1">
-            <span className="text-xs font-medium text-neutral-400">Buy / Sell</span>
+            <span className="text-xs font-medium text-muted-foreground">Buy / Sell</span>
             {loading ? (
-              <Skeleton className="h-8 w-32 bg-neutral-800" />
+              <Skeleton className="h-8 w-32 bg-muted" />
             ) : (
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl font-bold tabular-nums text-emerald-400">
+                  <span className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                     {currentBuy.toFixed(2)} ₴
                   </span>
                   <span
                     className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                       isBuyUp
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                        : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
                     }`}
                   >
                     {isBuyUp ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
                     {Math.abs(Number(buyPercent))}%
                   </span>
                 </div>
-                <div className="text-xs text-neutral-400">
-                  Sell: <span className="font-semibold text-sky-400">{currentSell.toFixed(2)} ₴</span>
+                <div className="text-xs text-muted-foreground">
+                  Sell: <span className="font-semibold text-sky-600 dark:text-sky-400">{currentSell.toFixed(2)} ₴</span>
                 </div>
               </div>
             )}
@@ -186,25 +186,25 @@ export function CurrencyCard() {
 
           <div className="h-14 w-full pt-2">
             {loading ? (
-              <Skeleton className="h-full w-full bg-neutral-800" />
+              <Skeleton className="h-full w-full bg-muted" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                   <defs>
                     <linearGradient id="currencyTrend" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={isBuyUp ? "#34d399" : "#f87171"} stopOpacity={0.4} />
-                      <stop offset="95%" stopColor={isBuyUp ? "#34d399" : "#f87171"} stopOpacity={0.0} />
+                      <stop offset="5%" stopColor={isBuyUp ? "#10b981" : "#f43f5e"} stopOpacity={0.4} />
+                      <stop offset="95%" stopColor={isBuyUp ? "#10b981" : "#f43f5e"} stopOpacity={0.0} />
                     </linearGradient>
                   </defs>
                   <YAxis domain={["dataMin - 0.05", "dataMax + 0.05"]} hide />
-                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#525252", strokeWidth: 1, strokeDasharray: "2 2" }} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1, strokeDasharray: "2 2" }} />
                   <Area
                     type="monotone"
                     dataKey="rate"
-                    stroke={isBuyUp ? "#34d399" : "#f87171"}
+                    stroke={isBuyUp ? "#10b981" : "#f43f5e"}
                     strokeWidth={2}
                     fill="url(#currencyTrend)"
-                    activeDot={{ r: 4, fill: isBuyUp ? "#34d399" : "#f87171", stroke: "#171717", strokeWidth: 2 }}
+                    activeDot={{ r: 4, fill: isBuyUp ? "#10b981" : "#f43f5e", stroke: "hsl(var(--background))", strokeWidth: 2 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -212,8 +212,8 @@ export function CurrencyCard() {
           </div>
         </div>
 
-        <div className="rounded-xl bg-neutral-800/30 p-3 border border-neutral-800/60 space-y-2">
-          <div className="flex items-center justify-between text-xs text-neutral-400">
+        <div className="rounded-xl bg-muted/30 p-3 border border-border space-y-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="font-medium">Quick Converter</span>
             <span>
               {convertDirection === "TO_UAH" ? "At buy rate" : "At sell rate"}
@@ -226,10 +226,10 @@ export function CurrencyCard() {
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="bg-neutral-900 border-neutral-700 text-white h-9 text-sm pr-12 focus-visible:ring-1 focus-visible:ring-emerald-500"
+                className="bg-background border-input text-foreground h-9 text-sm pr-12 focus-visible:ring-1 focus-visible:ring-emerald-500"
                 placeholder="Amount"
               />
-              <span className="absolute right-2.5 top-2 text-xs font-semibold text-neutral-400">
+              <span className="absolute right-2.5 top-2 text-xs font-semibold text-muted-foreground">
                 {inputCurrency}
               </span>
             </div>
@@ -238,14 +238,14 @@ export function CurrencyCard() {
               onClick={toggleDirection}
               type="button"
               title="Switch direction"
-              className="p-2 rounded-md bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition border border-neutral-700 shrink-0"
+              className="p-2 rounded-md bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition border border-input shrink-0"
             >
               <ArrowRightLeft className="size-4" />
             </button>
 
-            <div className="flex-1 bg-neutral-900 border border-neutral-700 rounded-md h-9 px-3 flex items-center justify-between text-sm">
-              <span className="font-bold text-emerald-400 tabular-nums truncate">{convertedValue}</span>
-              <span className="text-xs font-semibold text-neutral-400 ml-1">{outputCurrency}</span>
+            <div className="flex-1 bg-background border border-input rounded-md h-9 px-3 flex items-center justify-between text-sm">
+              <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums truncate">{convertedValue}</span>
+              <span className="text-xs font-semibold text-muted-foreground ml-1">{outputCurrency}</span>
             </div>
           </div>
         </div>

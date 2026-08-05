@@ -243,8 +243,48 @@ export default function DashboardPage() {
   }, [rates, displayCurrency]);
 
   const totalBalanceMinor = useMemo(
-    () => wallets.reduce((sum, w) => sum + toBase(w.balanceMinor, w.currency), 0),
+    () =>
+      wallets.reduce((sum, w) => {
+        // Credit wallets: balanceMinor is available credit, not cash.
+        // Only the amount paid in beyond the limit counts as real money.
+        const contributionMinor =
+          w.walletType === "credit"
+            ? Math.max(0, w.balanceMinor - (w.creditLimitMinor ?? 0))
+            : w.balanceMinor;
+        return sum + toBase(contributionMinor, w.currency);
+      }, 0),
     [wallets, toBase]
+  );
+
+  // Sum of available credit across all credit wallets (capped at each
+  // wallet's limit, in case one has been overpaid past its limit).
+  const totalCreditMinor = useMemo(
+    () =>
+      wallets
+        .filter((w) => w.walletType === "credit")
+        .reduce(
+          (sum, w) => sum + toBase(Math.min(w.balanceMinor, w.creditLimitMinor ?? 0), w.currency),
+          0
+        ),
+    [wallets, toBase]
+  );
+
+  // How much of the credit limit has been used up (debt owed), across all credit wallets.
+  const creditOwedMinor = useMemo(
+    () =>
+      wallets
+        .filter((w) => w.walletType === "credit")
+        .reduce(
+          (sum, w) =>
+            sum + toBase(Math.max(0, (w.creditLimitMinor ?? 0) - w.balanceMinor), w.currency),
+          0
+        ),
+    [wallets, toBase]
+  );
+
+  const hasCreditWallets = useMemo(
+    () => wallets.some((w) => w.walletType === "credit"),
+    [wallets]
   );
 
   const monthStart = useMemo(() => startOfMonth(now), [now]);
@@ -578,8 +618,7 @@ const confirmGoalUpdate = async () => {
         </div>
       )}
 
-      {/* Топ картки балансів */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className={cn("grid gap-4", hasCreditWallets ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -596,6 +635,23 @@ const confirmGoalUpdate = async () => {
             </p>
           </CardContent>
         </Card>
+        {hasCreditWallets && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total credit
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold tabular-nums">
+                {formatMoney(totalCreditMinor, BASE_CURRENCY)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                You owe {formatMoney(creditOwedMinor, BASE_CURRENCY)}
+              </p>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
