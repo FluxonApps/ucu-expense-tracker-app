@@ -21,6 +21,7 @@ import type { CurrencyCode, Transaction, TransactionType } from "@/lib/types";
 import { transactionRef, transactionsRef, walletRef } from "./refs";
 
 export interface TransactionInput {
+  id?: string;
   type: "income" | "expense";
   amountMinor: number;
   currency: CurrencyCode;
@@ -31,11 +32,11 @@ export interface TransactionInput {
 }
 
 export interface TransferInput {
+  id?: string;
   amountMinor: number;
   currency: CurrencyCode;
   walletId: string;
   toWalletId: string;
-  /** Amount credited to the destination wallet (after conversion). */
   toAmountMinor: number;
   date: Date;
   note: string;
@@ -60,38 +61,80 @@ function endOfDay(date: Date): Date {
 export async function createTransaction(
   uid: string,
   input: TransactionInput
-): Promise<void> {
+): Promise<boolean> {
   if (input.amountMinor <= 0) {
     throw new Error("Transaction amount must be greater than zero");
   }
 
-  const txRef = doc(transactionsRef(uid));
+  const txRef = input.id
+    ? doc(transactionsRef(uid), input.id)
+    : doc(transactionsRef(uid));
+
   const wRef = walletRef(uid, input.walletId);
+  let wasCreated = false;
 
-  const walletSnap = await getDoc(wRef);
-  if (!walletSnap.exists()) throw new Error("Wallet not found");
-  const wallet = walletSnap.data();
+  await runTransaction(db, async (t) => {
+    // 1. Direct ID check
+    if (input.id) {
+      const txSnap = await t.get(txRef);
+      if (txSnap.exists()) {
+        return; // Duplicate found by ID
+      }
+    }
 
-  const delta = input.type === "income" ? input.amountMinor : -input.amountMinor;
-  const newBalance = wallet.balanceMinor + delta;
+    // 2. Fallback safety check: Query existing transactions for this exact wallet, date, and note
+    // This prevents duplicates even if IDs or amounts vary slightly
+    const exactDateStart = Timestamp.fromDate(new Date(input.date.getTime() - 2000));
+    const exactDateEnd = Timestamp.fromDate(new Date(input.date.getTime() + 2000));
 
-  if (newBalance < 0) {
-    throw new Error("Insufficient balance: this expense would make the wallet negative");
-  }
+    const q = query(
+      transactionsRef(uid),
+      where("walletId", "==", input.walletId),
+      where("date", ">=", exactDateStart),
+      where("date", "<=", exactDateEnd)
+    );
 
-  await setDoc(txRef, {
-    id: txRef.id,
-    type: input.type,
-    amountMinor: input.amountMinor,
-    currency: input.currency,
-    walletId: input.walletId,
-    walletName: wallet.name,
-    categoryId: input.categoryId,
-    date: Timestamp.fromDate(input.date),
-    note: input.note,
-    createdAt: serverTimestamp() as unknown as Timestamp,
+    const existingSnap = await getDocs(q);
+    const isDuplicateByContent = existingSnap.docs.some((docSnap) => {
+      const data = docSnap.data();
+      const sameNote = (data.note || "").trim().toLowerCase() === (input.note || "").trim().toLowerCase();
+      const sameAmount = data.amountMinor === input.amountMinor;
+      return sameNote && sameAmount;
+    });
+
+    if (isDuplicateByContent) {
+      return; // Duplicate found by content matching! Skip creation.
+    }
+
+    const walletSnap = await t.get(wRef);
+    if (!walletSnap.exists()) throw new Error("Wallet not found");
+    const wallet = walletSnap.data();
+
+    const delta = input.type === "income" ? input.amountMinor : -input.amountMinor;
+    const newBalance = wallet.balanceMinor + delta;
+
+    if (newBalance < 0) {
+      throw new Error("Insufficient balance: this expense would make the wallet negative");
+    }
+
+    t.set(txRef, {
+      id: txRef.id,
+      type: input.type,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      walletId: input.walletId,
+      walletName: wallet.name,
+      categoryId: input.categoryId,
+      date: Timestamp.fromDate(input.date),
+      note: input.note,
+      createdAt: serverTimestamp() as unknown as Timestamp,
+    });
+
+    t.update(wRef, { balanceMinor: newBalance });
+    wasCreated = true;
   });
-  await updateDoc(wRef, { balanceMinor: newBalance });
+
+  return wasCreated;
 }
 
 export async function updateTransaction(
@@ -159,8 +202,6 @@ export async function deleteTransaction(uid: string, txId: string): Promise<void
       const toSnap = await t.get(toRef);
       if (!fromSnap.exists() || !toSnap.exists()) throw new Error("Wallet not found");
 
-      // Undo the transfer: give the amount back to the sender, take the
-      // credited amount back from the recipient.
       t.update(fromRef, {
         balanceMinor: fromSnap.data().balanceMinor + tx.amountMinor,
       });
@@ -172,8 +213,6 @@ export async function deleteTransaction(uid: string, txId: string): Promise<void
       const walletSnap = await t.get(wRef);
       if (!walletSnap.exists()) throw new Error("Wallet not found");
 
-      // Undo an income/expense: income added amountMinor, so subtract it
-      // back out; expense subtracted amountMinor, so add it back.
       const delta = tx.type === "income" ? -tx.amountMinor : tx.amountMinor;
       t.update(wRef, { balanceMinor: walletSnap.data().balanceMinor + delta });
     }
@@ -182,7 +221,7 @@ export async function deleteTransaction(uid: string, txId: string): Promise<void
   });
 }
 
-export async function createTransfer(uid: string, input: TransferInput): Promise<void> {
+export async function createTransfer(uid: string, input: TransferInput): Promise<boolean> {
   if (input.walletId === input.toWalletId) {
     throw new Error("Cannot transfer to the same wallet");
   }
@@ -191,11 +230,22 @@ export async function createTransfer(uid: string, input: TransferInput): Promise
     throw new Error("Transfer amount must be greater than zero");
   }
 
-  const txRef = doc(transactionsRef(uid));
+  const txRef = input.id
+    ? doc(transactionsRef(uid), input.id)
+    : doc(transactionsRef(uid));
+
   const fromRef = walletRef(uid, input.walletId);
   const toRef = walletRef(uid, input.toWalletId);
+  let wasCreated = false;
 
   await runTransaction(db, async (t) => {
+    if (input.id) {
+      const txSnap = await t.get(txRef);
+      if (txSnap.exists()) {
+        return;
+      }
+    }
+
     const fromSnap = await t.get(fromRef);
     const toSnap = await t.get(toRef);
     if (!fromSnap.exists() || !toSnap.exists()) throw new Error("Wallet not found");
@@ -221,12 +271,14 @@ export async function createTransfer(uid: string, input: TransferInput): Promise
     });
     t.update(fromRef, { balanceMinor: fromSnap.data().balanceMinor - input.amountMinor });
     t.update(toRef, { balanceMinor: toSnap.data().balanceMinor + input.toAmountMinor });
+    wasCreated = true;
   });
+
+  return wasCreated;
 }
 
 export interface TransactionsPage {
   transactions: Transaction[];
-  /** Cursor for the next page; null when there are no more results. */
   cursor: Timestamp | null;
 }
 
@@ -263,7 +315,6 @@ export async function fetchTransactionsPage(
   return { transactions, cursor: nextCursor };
 }
 
-/** Live subscription to all transactions in a date range (used by the dashboard). */
 export function subscribeToTransactionsInRange(
   uid: string,
   from: Date,
