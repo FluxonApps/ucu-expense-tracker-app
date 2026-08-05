@@ -1,5 +1,6 @@
 import {
   addDoc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
