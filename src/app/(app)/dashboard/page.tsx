@@ -642,10 +642,10 @@ const confirmGoalUpdate = async () => {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-semibold tabular-nums">
-                {formatMoney(totalCreditMinor, BASE_CURRENCY)}
+                {formatMoney(totalCreditMinor, displayCurrency)}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                You owe {formatMoney(creditOwedMinor, BASE_CURRENCY)}
+                You owe {formatMoney(creditOwedMinor, displayCurrency)}
               </p>
             </CardContent>
           </Card>
