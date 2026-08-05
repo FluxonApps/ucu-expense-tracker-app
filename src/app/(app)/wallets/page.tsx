@@ -124,7 +124,7 @@ export default function WalletsPage() {
           {wallets.map((wallet) => (
             <Card
               key={wallet.id}
-              className="relative overflow-hidden bg-white text-neutral-900"
+              className="relative overflow-hidden bg-white dark:bg-zinc-900 text-neutral-900 dark:text-zinc-100 border-border"
             >
               <div
                 className="absolute inset-y-0 left-0 w-1.5"
@@ -142,7 +142,7 @@ export default function WalletsPage() {
                     <div className="flex items-center gap-1.5">
                       <p className="font-medium">{wallet.name}</p>
                       {wallet.walletType === "credit" && (
-                        <span className="inline-flex items-center rounded-full border border-neutral-300 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500">
+                        <span className="inline-flex items-center rounded-full border border-neutral-300 dark:border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500 dark:text-zinc-400">
                           Credit
                         </span>
                       )}
