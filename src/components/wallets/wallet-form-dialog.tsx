@@ -32,10 +32,25 @@ function minorToInputString(minor: number): string {
   return (minor / 100).toFixed(2);
 }
 
-// Filter out black colors so they never appear in the picker
-const AVAILABLE_COLORS = WALLET_COLORS.filter(
-  (c) => c.toLowerCase() !== "#000000" && c.toLowerCase() !== "#000" && c.toLowerCase() !== "black"
-);
+// Aggressively filter out all common Tailwind blacks/dark grays
+const BLACK_VARIANTS = [
+  "#000000", "#000", "black",
+  "#171717", // neutral-900
+  "#0a0a0a", // neutral-950
+  "#18181b", // zinc-900
+  "#09090b", // zinc-950
+  "#111827", // gray-900
+  "#030712", // gray-950
+  "#0f172a", // slate-900
+  "#020617", // slate-950
+];
+
+const AVAILABLE_COLORS = [
+  ...WALLET_COLORS.filter(
+    (c) => !BLACK_VARIANTS.includes(c.toLowerCase())
+  ),
+  "#ec4899", // Pink
+];
 
 interface WalletFormDialogProps {
   open: boolean;
