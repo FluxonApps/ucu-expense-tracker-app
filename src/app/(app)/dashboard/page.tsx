@@ -375,8 +375,6 @@ export default function DashboardPage() {
 
   const recentTxs = useMemo(() => transactions.slice(0, 8), [transactions]);
 
-  const topCategories = pieData.slice(0, 5);
-
   /**
  * Відкриває порожню форму створення нової цілі.
  */
@@ -1103,7 +1101,7 @@ const confirmGoalUpdate = async () => {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="w-full space-y-1.5 sm:w-52">
-                  {topCategories.map((entry) => (
+                    {pieData.map((entry) => (
                     <div key={entry.name} className="flex items-center gap-2 text-sm">
                       <span
                         className="size-2.5 shrink-0 rounded-full"
