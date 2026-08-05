@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { useData } from "@/components/data-provider";
 import { AppIcon } from "@/components/icons";
@@ -81,6 +82,8 @@ import {
 import type { RecurringTransaction, Transaction, TransactionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 const ALL = "all";
 const AUTOMATIC = "automatic";
 const ONE_TIME = "one-time";
@@ -123,13 +126,26 @@ function DateFilterButton({
 export default function TransactionsPage() {
   const { user } = useAuth();
   const { wallets, categories } = useData();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  const [filterWallet, setFilterWallet] = useState(ALL);
-  const [filterCategory, setFilterCategory] = useState(ALL);
-  const [filterType, setFilterType] = useState(ALL);
-  const [filterPayment, setFilterPayment] = useState(ALL);
-  const [dateFrom, setDateFrom] = useState<Date | undefined>();
-  const [dateTo, setDateTo] = useState<Date | undefined>();
+  const readStored = (key: string) =>
+    typeof window !== "undefined" ? sessionStorage.getItem(key) : null;
+  const [filterWallet, setFilterWallet] = useState(
+    searchParams.get("wallet") ?? readStored("tx:wallet") ?? ALL);
+  const [filterCategory, setFilterCategory] = useState(
+    searchParams.get("category") ?? readStored("tx:category") ?? ALL);
+  const [filterType, setFilterType] = useState(
+    searchParams.get("type") ?? readStored("tx:type") ?? ALL);
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(() => {
+    const v = searchParams.get("from") ?? readStored("tx:from");
+    return v ? new Date(v) : undefined;
+  });
+  const [dateTo, setDateTo] = useState<Date | undefined>(() => {
+    const v = searchParams.get("to") ?? readStored("tx:to");
+    return v ? new Date(v) : undefined;
+  });
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
@@ -178,13 +194,24 @@ export default function TransactionsPage() {
   }, [loadFirstPage]);
 
   useEffect(() => {
-    if (!user) {
-      setRecurringTransactions([]);
-      return;
-    }
-    return subscribeToRecurringTransactions(user.uid, setRecurringTransactions);
-  }, [user]);
+    const params = new URLSearchParams();
+    if (filterWallet !== ALL) params.set("wallet", filterWallet);
+    if (filterCategory !== ALL) params.set("category", filterCategory);
+    if (filterType !== ALL) params.set("type", filterType);
+    if (dateFrom) params.set("from", dateFrom.toISOString().slice(0, 10));
+    if (dateTo) params.set("to", dateTo.toISOString().slice(0, 10));
 
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+
+    sessionStorage.setItem("tx:wallet", filterWallet);
+    sessionStorage.setItem("tx:category", filterCategory);
+    sessionStorage.setItem("tx:type", filterType);
+    if (dateFrom) sessionStorage.setItem("tx:from", dateFrom.toISOString().slice(0, 10));
+    else sessionStorage.removeItem("tx:from");
+    if (dateTo) sessionStorage.setItem("tx:to", dateTo.toISOString().slice(0, 10));
+    else sessionStorage.removeItem("tx:to");
+  }, [filterWallet, filterCategory, filterType, dateFrom, dateTo, pathname, router]);
   const loadMore = async () => {
     if (!user || !cursor) return;
     setLoadingMore(true);
