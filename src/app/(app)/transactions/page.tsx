@@ -197,6 +197,16 @@ export default function TransactionsPage() {
     loadFirstPage();
   }, [loadFirstPage]);
 
+  // Keep automatic-payment schedules in sync with Firestore so they can be
+  // shown in both the "All payments" and "Automatic" views.
+  useEffect(() => {
+    if (!user) {
+      setRecurringTransactions([]);
+      return;
+    }
+    return subscribeToRecurringTransactions(user.uid, setRecurringTransactions);
+  }, [user]);
+
   useEffect(() => {
     const params = new URLSearchParams();
     if (filterWallet !== ALL) params.set("wallet", filterWallet);
