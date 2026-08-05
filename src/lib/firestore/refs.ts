@@ -41,6 +41,18 @@ export function transactionRef(uid: string, txId: string) {
   return doc(db, "users", uid, "transactions", txId).withConverter(transactionConverter);
 }
 
+export function recurringTransactionsRef(uid: string) {
+  return collection(db, "users", uid, "recurringTransactions").withConverter(
+    recurringTransactionConverter
+  );
+}
+
+export function recurringTransactionRef(uid: string, scheduleId: string) {
+  return doc(db, "users", uid, "recurringTransactions", scheduleId).withConverter(
+    recurringTransactionConverter
+  );
+}
+
 export function categoriesRef(uid: string) {
   return collection(db, "users", uid, "categories").withConverter(categoryConverter);
 }

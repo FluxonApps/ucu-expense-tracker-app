@@ -1,15 +1,19 @@
 import {
   addDoc,
-  deleteDoc,
+  getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   Timestamp,
   updateDoc,
+  where,
+  writeBatch,
 } from "firebase/firestore";
-import type { CurrencyCode, Wallet, WalletType } from "@/lib/types";
-import { walletRef, walletsRef } from "./refs";
+import { db } from "@/lib/firebase";
+import type { CurrencyCode, Wallet } from "@/lib/types";
+import { transactionsRef, walletRef, walletsRef } from "./refs";
 
 export interface WalletInput {
   name: string;
@@ -68,5 +72,23 @@ export async function updateWallet(
 }
 
 export async function deleteWallet(uid: string, walletId: string): Promise<void> {
-  await deleteDoc(walletRef(uid, walletId));
+  const wRef = walletRef(uid, walletId);
+  const walletSnap = await getDoc(wRef);
+  if (!walletSnap.exists()) throw new Error("Wallet not found");
+
+  const walletName = walletSnap.data().name;
+  const [sourceTransactions, destinationTransactions] = await Promise.all([
+    getDocs(query(transactionsRef(uid), where("walletId", "==", walletId))),
+    getDocs(query(transactionsRef(uid), where("toWalletId", "==", walletId))),
+  ]);
+
+  const batch = writeBatch(db);
+  for (const transaction of sourceTransactions.docs) {
+    batch.update(transaction.ref, { walletName });
+  }
+  for (const transaction of destinationTransactions.docs) {
+    batch.update(transaction.ref, { toWalletName: walletName });
+  }
+  batch.delete(wRef);
+  await batch.commit();
 }

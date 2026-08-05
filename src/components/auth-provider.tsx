@@ -52,13 +52,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        await ensureUserSetup(firebaseUser);
+      try {
+        if (firebaseUser) {
+          await ensureUserSetup(firebaseUser);
+          setUser(firebaseUser);
+        } else {
+          setUser(null);
+        }
+      } catch (error) {
+        // A Firestore setup failure must not leave the whole app permanently
+        // on the loading screen. The user can still reach the app and retry.
+        console.error("Failed to set up the user profile", error);
         setUser(firebaseUser);
-      } else {
-        setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsubscribe;
   }, []);
