@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   CalendarIcon,
   Download,
+  FileSpreadsheet,
   MoreVertical,
   Pencil,
   Pause,
@@ -151,6 +152,7 @@ export default function TransactionsPage() {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -197,8 +199,6 @@ export default function TransactionsPage() {
     loadFirstPage();
   }, [loadFirstPage]);
 
-  // Keep automatic-payment schedules in sync with Firestore so they can be
-  // shown in both the "All payments" and "Automatic" views.
   useEffect(() => {
     if (!user) {
       setRecurringTransactions([]);
@@ -243,6 +243,80 @@ export default function TransactionsPage() {
     } finally {
       setLoadingMore(false);
     }
+  };
+
+  // --- CSV EXPORT HELPERS ---
+  const downloadCSV = (itemsToExport: Transaction[], filename: string) => {
+    const headers = ["Date", "Type", "Category", "Note", "Wallet", "Amount", "Currency"];
+    const rows = itemsToExport.map((tx) => {
+      const txDate = tx.date.toDate().toISOString().slice(0, 10);
+      const catName = categoryOf(tx.categoryId)?.name || (tx.type === "transfer" ? "Transfer" : "Uncategorized");
+      const wName = walletName(tx.walletId, tx.walletName);
+      const amountVal = (tx.amountMinor / 100).toFixed(2);
+      const signedAmount = tx.type === "expense" ? `-${amountVal}` : amountVal;
+      const escapedNote = `"${(tx.note || "").replace(/"/g, '""')}"`;
+
+      return [txDate, tx.type, `"${catName}"`, escapedNote, `"${wName}"`, signedAmount, tx.currency].join(",");
+    });
+
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportFilteredCSV = async () => {
+    if (!user) return;
+    setIsExporting(true);
+    try {
+      let allMatchingTxs: Transaction[] = [];
+      let currentCursor = null;
+      let safetyCounter = 0;
+
+      do {
+        const page = await fetchTransactionsPage(user.uid, buildFilters(), currentCursor);
+        allMatchingTxs = [...allMatchingTxs, ...page.transactions];
+        currentCursor = page.cursor;
+        safetyCounter++;
+      } while (currentCursor !== null && safetyCounter < 50);
+
+      if (allMatchingTxs.length === 0) {
+        toast.error("No transactions found matching your current filters to export.");
+        setIsExporting(false);
+        return;
+      }
+
+      const dateStr = format(new Date(), "yyyy-MM-dd");
+      downloadCSV(allMatchingTxs, `transactions_filtered_${dateStr}.csv`);
+      toast.success(`Successfully exported ${allMatchingTxs.length} transaction(s)!`);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to export transactions.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportSelectedCSV = () => {
+    if (selectedTransactionIds.length === 0) {
+      toast.error("No transactions selected for export.");
+      return;
+    }
+
+    const selectedTxs = transactions.filter((tx) => selectedTransactionIds.includes(tx.id));
+    if (selectedTxs.length === 0) {
+      toast.error("Selected transactions not found in current view.");
+      return;
+    }
+
+    const dateStr = format(new Date(), "yyyy-MM-dd");
+    downloadCSV(selectedTxs, `transactions_selected_${dateStr}.csv`);
+    toast.success(`Successfully exported ${selectedTxs.length} selected transaction(s)!`);
   };
 
   const handleDelete = async () => {
@@ -395,8 +469,28 @@ export default function TransactionsPage() {
             All income, expenses, and transfers
           </p>
         </div>
-        {/* IMPORT & ADD TRANSACTION BUTTONS */}
+        {/* ACTION BUTTONS (IMPORT, EXPORT MENU, ADD) */}
         <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={isExporting}>
+                <FileSpreadsheet className="size-4" />
+                {isExporting ? "Exporting..." : "Export CSV"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportFilteredCSV}>
+                Export filtered view (All matches)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleExportSelectedCSV}
+                disabled={selectedTransactionIds.length === 0}
+              >
+                Export checked items only ({selectedTransactionIds.length})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
             <Download className="size-4" />
             Import transactions
