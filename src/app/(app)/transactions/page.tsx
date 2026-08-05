@@ -717,13 +717,32 @@ export default function TransactionsPage() {
         recurringTransaction={editingRecurringTx}
         onSaved={loadFirstPage}
       />
-
-      {/* Import Transactions Modal */}
+    {/* Import Transactions Modal */}
       <ImportTransactionsDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         onSuccess={loadFirstPage}
       />
+
+      {/* Import Transactions Modal Placeholder */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Transactions</DialogTitle>
+            <DialogDescription>
+              Import transactions directly from your banking application or file.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-8 text-center text-sm text-muted-foreground border-2 border-dashed rounded-lg">
+            Import functionality will be implemented here.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={Boolean(deletingTx)}
