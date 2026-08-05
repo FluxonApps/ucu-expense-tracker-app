@@ -146,7 +146,7 @@ export default function TransactionsPage() {
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [recurringTransactions] = useState<RecurringTransaction[]>([]);
+  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
   const [cursor, setCursor] = useState<TransactionsPage["cursor"]>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);

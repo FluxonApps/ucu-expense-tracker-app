@@ -4,6 +4,8 @@ export type CurrencyCode = "UAH" | "USD" | "EUR" | "PLN";
 
 export type TransactionType = "income" | "expense" | "transfer";
 
+export type WalletType = "standard" | "credit";
+
 /** How often an automatic income or expense is created. */
 export type PaymentFrequency =
   | "monthly"

@@ -1,6 +1,5 @@
 import {
   doc,
-  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -9,10 +8,8 @@ import {
   type QueryConstraint,
   runTransaction,
   serverTimestamp,
-  setDoc,
   startAfter,
   Timestamp,
-  updateDoc,
   where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -224,13 +221,6 @@ export async function deleteTransaction(uid: string, txId: string): Promise<void
 
 /** Deletes transactions one by one so every existing wallet balance is safely restored. */
 export async function deleteTransactions(uid: string, txIds: string[]): Promise<void> {
-  for (const txId of [...new Set(txIds)]) {
-    await deleteTransaction(uid, txId);
-  }
-}
-
-/** Deletes transactions one by one so every existing wallet balance is safely restored. */
-export async function deleteTransactions(uid: string, txIds: string[]): Promise<boolean> {
   for (const txId of [...new Set(txIds)]) {
     await deleteTransaction(uid, txId);
   }
