@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   CalendarIcon,
+  Download,
   MoreVertical,
   Pencil,
   Plus,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { useData } from "@/components/data-provider";
 import { AppIcon } from "@/components/icons";
@@ -32,6 +34,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,6 +74,8 @@ import {
 } from "@/lib/firestore/transactions";
 import type { Transaction, TransactionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+export const dynamic = "force-dynamic";
 
 const ALL = "all";
 
@@ -98,12 +110,26 @@ function DateFilterButton({
 export default function TransactionsPage() {
   const { user } = useAuth();
   const { wallets, categories } = useData();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  const [filterWallet, setFilterWallet] = useState(ALL);
-  const [filterCategory, setFilterCategory] = useState(ALL);
-  const [filterType, setFilterType] = useState(ALL);
-  const [dateFrom, setDateFrom] = useState<Date | undefined>();
-  const [dateTo, setDateTo] = useState<Date | undefined>();
+  const readStored = (key: string) =>
+    typeof window !== "undefined" ? sessionStorage.getItem(key) : null;
+  const [filterWallet, setFilterWallet] = useState(
+    searchParams.get("wallet") ?? readStored("tx:wallet") ?? ALL);
+  const [filterCategory, setFilterCategory] = useState(
+    searchParams.get("category") ?? readStored("tx:category") ?? ALL);
+  const [filterType, setFilterType] = useState(
+    searchParams.get("type") ?? readStored("tx:type") ?? ALL);
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(() => {
+    const v = searchParams.get("from") ?? readStored("tx:from");
+    return v ? new Date(v) : undefined;
+  });
+  const [dateTo, setDateTo] = useState<Date | undefined>(() => {
+    const v = searchParams.get("to") ?? readStored("tx:to");
+    return v ? new Date(v) : undefined;
+  });
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [cursor, setCursor] = useState<TransactionsPage["cursor"]>(null);
@@ -112,6 +138,7 @@ export default function TransactionsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -146,6 +173,25 @@ export default function TransactionsPage() {
     loadFirstPage();
   }, [loadFirstPage]);
 
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filterWallet !== ALL) params.set("wallet", filterWallet);
+    if (filterCategory !== ALL) params.set("category", filterCategory);
+    if (filterType !== ALL) params.set("type", filterType);
+    if (dateFrom) params.set("from", dateFrom.toISOString().slice(0, 10));
+    if (dateTo) params.set("to", dateTo.toISOString().slice(0, 10));
+
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+
+    sessionStorage.setItem("tx:wallet", filterWallet);
+    sessionStorage.setItem("tx:category", filterCategory);
+    sessionStorage.setItem("tx:type", filterType);
+    if (dateFrom) sessionStorage.setItem("tx:from", dateFrom.toISOString().slice(0, 10));
+    else sessionStorage.removeItem("tx:from");
+    if (dateTo) sessionStorage.setItem("tx:to", dateTo.toISOString().slice(0, 10));
+    else sessionStorage.removeItem("tx:to");
+  }, [filterWallet, filterCategory, filterType, dateFrom, dateTo, pathname, router]);
   const loadMore = async () => {
     if (!user || !cursor) return;
     setLoadingMore(true);
@@ -205,15 +251,21 @@ export default function TransactionsPage() {
             All income, expenses, and transfers
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditingTx(null);
-            setFormOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Add transaction
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Download className="size-4" />
+            Import transactions
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingTx(null);
+              setFormOpen(true);
+            }}
+          >
+            <Plus className="size-4" />
+            Add transaction
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -402,6 +454,26 @@ export default function TransactionsPage() {
         transaction={editingTx}
         onSaved={loadFirstPage}
       />
+
+      {/* Import Transactions Modal Placeholder */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Transactions</DialogTitle>
+            <DialogDescription>
+              Import transactions directly from your banking application or file.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-8 text-center text-sm text-muted-foreground border-2 border-dashed rounded-lg">
+            Import functionality will be implemented here.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={Boolean(deletingTx)}
