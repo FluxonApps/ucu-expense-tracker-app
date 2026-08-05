@@ -685,13 +685,17 @@ const confirmGoalUpdate = async () => {
                   0
                 );
 
+              // goal.limitMinor завжди зберігається у goal.currency (UAH),
+              // тож конвертуємо його в обрану валюту так само, як spentMinor.
+              const goalLimitMinor = toBase(goal.limitMinor, goal.currency);
+
               const percentage = Math.min(
-                (spentMinor / goal.limitMinor) * 100,
+                (spentMinor / goalLimitMinor) * 100,
                 100
               );
 
               const remainingMinor = Math.max(
-                goal.limitMinor - spentMinor,
+                goalLimitMinor - spentMinor,
                 0
               );
 
@@ -727,11 +731,11 @@ const confirmGoalUpdate = async () => {
                       />
 
                       <span className="absolute inset-y-0 left-4 flex items-center text-sm font-medium">
-                        {formatMoney(spentMinor, BASE_CURRENCY)} spent
+                        {formatMoney(spentMinor, displayCurrency)} spent
                       </span>
 
                       <span className="absolute inset-y-0 right-4 flex items-center text-sm font-medium">
-                        {formatMoney(remainingMinor, BASE_CURRENCY)} left
+                        {formatMoney(remainingMinor, displayCurrency)} left
                       </span>
                     </div>
 
