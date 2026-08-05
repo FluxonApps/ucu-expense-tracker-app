@@ -624,7 +624,397 @@ const confirmGoalUpdate = async () => {
         </Card>
       </div>
 
-      {/* Верхні графіки */}
+            {/* Budget goals */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-base">
+              Budget goals
+            </CardTitle>
+
+            <p className="text-sm text-muted-foreground">
+              Track spending limits for selected categories
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={openCreateGoalDialog}
+          >
+            <Plus className="size-4" />
+            Add goal
+          </Button>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {budgetGoals.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No budget goals yet
+            </p>
+          ) : (
+            budgetGoals.map((goal) => {
+              const category = categories.find(
+                (item) => item.id === goal.categoryId
+              );
+
+              if (!category) return null;
+
+              const cycle = getCurrentGoalCycle(goal, now);
+              const cycleEndExclusive = addDays(cycle.cycleEnd, 1);
+
+              const spentMinor = transactions
+                .filter((tx) => {
+                  if (
+                    tx.type !== "expense" ||
+                    tx.categoryId !== goal.categoryId
+                  ) {
+                    return false;
+                  }
+
+                  const transactionDate = tx.date.toDate();
+
+                  return (
+                    transactionDate >= cycle.cycleStart &&
+                    transactionDate < cycleEndExclusive
+                  );
+                })
+                .reduce(
+                  (sum, tx) =>
+                    sum + toBase(tx.amountMinor, tx.currency),
+                  0
+                );
+
+              // goal.limitMinor завжди зберігається у goal.currency (UAH),
+              // тож конвертуємо його в обрану валюту так само, як spentMinor.
+              const goalLimitMinor = toBase(goal.limitMinor, goal.currency);
+
+              const percentage = Math.min(
+                (spentMinor / goalLimitMinor) * 100,
+                100
+              );
+
+              const remainingMinor = Math.max(
+                goalLimitMinor - spentMinor,
+                0
+              );
+
+              return (
+                <div key={goal.id} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="size-2.5 rounded-full"
+                        style={{
+                          backgroundColor: category.color,
+                        }}
+                      />
+
+                      <p className="font-medium">
+                        {category.name}
+                      </p>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                      {Math.round(percentage)}%
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative h-10 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${percentage}%`,
+                          backgroundColor: category.color,
+                        }}
+                      />
+
+                      <span className="absolute inset-y-0 left-4 flex items-center text-sm font-medium">
+                        {formatMoney(spentMinor, displayCurrency)} spent
+                      </span>
+
+                      <span className="absolute inset-y-0 right-4 flex items-center text-sm font-medium">
+                        {formatMoney(remainingMinor, displayCurrency)} left
+                      </span>
+                    </div>
+
+                    <div className="sm:w-44">
+                      <p
+                        className={cn(
+                          "text-sm",
+                          cycle.isLastDay
+                            ? "font-medium text-destructive"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        {cycle.isLastDay
+                          ? "Last day"
+                          : `${cycle.daysLeft} day${
+                              cycle.daysLeft === 1 ? "" : "s"
+                            } left`}
+                      </p>
+
+                      <p className="text-xs text-muted-foreground">
+                        Ends {format(cycle.cycleEnd, "d MMM yyyy")}
+                      </p>
+                    </div>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Actions for ${category.name}`}
+                        >
+                          <MoreVertical className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            openEditGoalDialog(goal)
+                          }
+                        >
+                          Edit goal
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() =>
+                            requestGoalDelete(goal)
+                          }
+                        >
+                          Delete goal
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+
+
+      <Dialog
+  open={goalDialogOpen}
+  onOpenChange={(open) => {
+    if (!goalSaving) {
+      setGoalDialogOpen(open);
+    }
+  }}
+>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>
+        {editingGoal
+          ? "Edit budget goal"
+          : "Add budget goal"}
+      </DialogTitle>
+
+      <DialogDescription>
+        Choose an expense category, spending limit and deadline.
+      </DialogDescription>
+    </DialogHeader>
+
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="goal-category">
+          Category
+        </Label>
+
+        <Select
+          value={goalCategoryId}
+          onValueChange={setGoalCategoryId}
+        >
+          <SelectTrigger
+            id="goal-category"
+            className="w-full"
+          >
+            <SelectValue placeholder="Choose a category" />
+          </SelectTrigger>
+
+          <SelectContent>
+            {availableGoalCategories.map((category) => (
+              <SelectItem
+                key={category.id}
+                value={category.id}
+              >
+                <span
+                  className="size-2.5 rounded-full"
+                  style={{
+                    backgroundColor: category.color,
+                  }}
+                />
+
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="goal-amount">
+          Budget amount, UAH
+        </Label>
+
+        <Input
+          id="goal-amount"
+          type="number"
+          min="0.01"
+          step="0.01"
+          value={goalAmount}
+          onChange={(event) =>
+            setGoalAmount(event.target.value)
+          }
+          placeholder="5000"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="goal-deadline">
+          Deadline
+        </Label>
+
+        <Input
+          id="goal-deadline"
+          type="date"
+          min={format(now, "yyyy-MM-dd")}
+          max={format(addDays(now, 89), "yyyy-MM-dd")}
+          value={goalDeadline}
+          onChange={(event) =>
+            setGoalDeadline(event.target.value)
+          }
+        />
+      </div>
+
+      {goalError && (
+        <p className="text-sm text-destructive">
+          {goalError}
+        </p>
+      )}
+    </div>
+
+    <DialogFooter>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={goalSaving}
+        onClick={() => setGoalDialogOpen(false)}
+      >
+        Cancel
+      </Button>
+
+      <Button
+        type="button"
+        disabled={goalSaving}
+        onClick={
+          editingGoal
+            ? requestGoalUpdate
+            : createGoal
+        }
+      >
+        {goalSaving
+          ? "Saving..."
+          : editingGoal
+            ? "Update goal"
+            : "Create goal"}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
+      <AlertDialog
+  open={editConfirmationOpen}
+  onOpenChange={setEditConfirmationOpen}
+>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>
+        Change this budget goal?
+      </AlertDialogTitle>
+
+      <AlertDialogDescription>
+        The current cycle will end. A new repeating cycle
+        will start today with the selected category,
+        amount and deadline.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+
+    <AlertDialogFooter>
+      <AlertDialogCancel disabled={goalSaving}>
+        Cancel
+      </AlertDialogCancel>
+
+      <AlertDialogAction
+        disabled={goalSaving}
+        onClick={(event) => {
+          event.preventDefault();
+          void confirmGoalUpdate();
+        }}
+      >
+        {goalSaving
+          ? "Saving..."
+          : "Confirm changes"}
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
+
+            {/* Confirmation before deleting a budget goal */}
+      <AlertDialog
+        open={deleteConfirmationOpen}
+        onOpenChange={(open) => {
+          // Не дозволяємо закрити вікно під час видалення.
+          if (goalSaving) return;
+
+          setDeleteConfirmationOpen(open);
+
+          // Якщо користувач натиснув Cancel або закрив вікно,
+          // більше не зберігаємо вибрану для видалення ціль.
+          if (!open) {
+            setGoalToDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete this budget goal?
+            </AlertDialogTitle>
+
+            <AlertDialogDescription>
+              This will permanently remove the budget goal.
+              The category and its transactions will not be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={goalSaving}>
+              Cancel
+            </AlertDialogCancel>
+
+            <AlertDialogAction
+              disabled={goalSaving}
+              onClick={(event) => {
+                // Не закриваємо AlertDialog раніше,
+                // ніж завершиться запит до Firestore.
+                event.preventDefault();
+                void confirmGoalDelete();
+              }}
+            >
+              {goalSaving ? "Deleting..." : "Delete goal"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
