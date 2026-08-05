@@ -79,7 +79,7 @@ import {
 import {
   deleteRecurringTransaction,
   setRecurringTransactionActive,
-  subscribeToRecurringTransactions,
+    subscribeToRecurringTransactions,
 } from "@/lib/firestore/recurring-transactions";
 import type { RecurringTransaction, Transaction, TransactionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -197,6 +197,16 @@ export default function TransactionsPage() {
     loadFirstPage();
   }, [loadFirstPage]);
 
+  // Keep automatic-payment schedules in sync with Firestore so they can be
+  // shown in both the "All payments" and "Automatic" views.
+  useEffect(() => {
+    if (!user) {
+      setRecurringTransactions([]);
+      return;
+    }
+    return subscribeToRecurringTransactions(user.uid, setRecurringTransactions);
+  }, [user]);
+
   useEffect(() => {
     const params = new URLSearchParams();
     if (filterWallet !== ALL) params.set("wallet", filterWallet);
@@ -218,6 +228,7 @@ export default function TransactionsPage() {
     if (dateTo) sessionStorage.setItem("tx:to", dateTo.toISOString().slice(0, 10));
     else sessionStorage.removeItem("tx:to");
   }, [filterWallet, filterCategory, filterType, filterPayment, dateFrom, dateTo, pathname, router]);
+
   const loadMore = async () => {
     if (!user || !cursor) return;
     setLoadingMore(true);
@@ -324,16 +335,23 @@ export default function TransactionsPage() {
             All income, expenses, and transfers
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditingTx(null);
-            setEditingRecurringTx(null);
-            setFormOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Add transaction
-        </Button>
+        {/* IMPORT & ADD TRANSACTION BUTTONS */}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Download className="size-4" />
+            Import transactions
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingTx(null);
+              setEditingRecurringTx(null);
+              setFormOpen(true);
+            }}
+          >
+            <Plus className="size-4" />
+            Add transaction
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

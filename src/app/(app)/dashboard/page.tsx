@@ -1,5 +1,6 @@
 "use client";
 
+import { CurrencyCard } from "@/components/currency-card";
 import {
   addDays,
   differenceInCalendarDays,
@@ -282,8 +283,8 @@ export default function DashboardPage() {
           value: Math.round(valueMinor / 100),
         };
       })
-        .filter((entry) => entry.value > 0)
-        .sort((a, b) => b.value - a.value);
+      .filter((entry) => entry.value > 0)
+      .sort((a, b) => b.value - a.value);
   }, [monthTxs, categories, toBase]);
 
 // Bars: income vs expenses per month for the last 6 months
@@ -568,7 +569,6 @@ const confirmGoalUpdate = async () => {
         <CurrencySwitcher />
       </div>
 
-
       {ratesError && (
         <div className="flex items-center gap-2 rounded-lg bg-amber-100 px-4 py-3 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-400">
           <AlertTriangle className="size-5 shrink-0" />
@@ -578,6 +578,7 @@ const confirmGoalUpdate = async () => {
         </div>
       )}
 
+      {/* Топ картки балансів */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
@@ -1101,6 +1102,7 @@ const confirmGoalUpdate = async () => {
         </Card>
       </div>
 
+      {/* Нижні картки: Daily spending, Currency rates & Recent transactions */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -1121,85 +1123,85 @@ const confirmGoalUpdate = async () => {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-base">Recent transactions</CardTitle>
-            <Link
-              href="/transactions"
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
-              View all
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {recentTxs.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No transactions yet
-              </p>
-            ) : (
-              recentTxs.map((tx) => {
-                const category = categoryOf(tx.categoryId);
-                return (
-                  <div key={tx.id} className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-full",
-                        tx.type === "income" &&
-                          "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400",
-                        tx.type === "expense" &&
-                          "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
-                        tx.type === "transfer" && "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {tx.type === "income" ? (
-                        <ArrowDownLeft className="size-4" />
-                      ) : tx.type === "expense" ? (
-                        <ArrowUpRight className="size-4" />
-                      ) : (
-                        <ArrowLeftRight className="size-4" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {tx.type === "transfer"
-                          ? `${walletName(tx.walletId, tx.walletName)} → ${walletName(
-                              tx.toWalletId ?? "",
-                              tx.toWalletName
-                            )}`
-                          : tx.note || category?.name || "Transaction"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(tx.date.toDate(), "d MMM")}
-                        {tx.type !== "transfer" && category ? (
-                          <> · {category.name}</>
-                        ) : null}
-                      </p>
-                    </div>
-                    {tx.type !== "transfer" && category && (
-                      <Badge variant="outline" className="hidden gap-1 sm:inline-flex">
-                        <span style={{ color: category.color }}>
-                          <AppIcon name={category.icon} className="size-3" />
-                        </span>
-                        {category.name}
-                      </Badge>
-                    )}
-                    <span
-                      className={cn(
-                        "shrink-0 text-sm font-medium tabular-nums",
-                        tx.type === "income" && "text-green-600 dark:text-green-500",
-                        tx.type === "expense" && "text-red-600 dark:text-red-500"
-                      )}
-                    >
-                      {tx.type === "expense" ? "-" : tx.type === "income" ? "+" : ""}
-                      {formatMoney(tx.amountMinor, tx.currency)}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
+        <CurrencyCard />
       </div>
+
+      {/* Картка останніх транзакцій */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle className="text-base">Recent transactions</CardTitle>
+          <Link
+            href="/transactions"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            View all
+          </Link>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {recentTxs.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No transactions yet
+            </p>
+          ) : (
+            recentTxs.map((tx) => {
+              const category = categoryOf(tx.categoryId);
+              return (
+                <div key={tx.id} className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-full",
+                      tx.type === "income" &&
+                        "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400",
+                      tx.type === "expense" &&
+                        "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+                      tx.type === "transfer" && "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {tx.type === "income" ? (
+                      <ArrowDownLeft className="size-4" />
+                    ) : tx.type === "expense" ? (
+                      <ArrowUpRight className="size-4" />
+                    ) : (
+                      <ArrowLeftRight className="size-4" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {tx.type === "transfer"
+                        ? `${walletName(tx.walletId)} → ${walletName(tx.toWalletId ?? "")}`
+                        : tx.note || category?.name || "Transaction"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(tx.date.toDate(), "d MMM")}
+                      {tx.type !== "transfer" && category ? (
+                        <> · {category.name}</>
+                      ) : null}
+                    </p>
+                  </div>
+                  {tx.type !== "transfer" && category && (
+                    <Badge variant="outline" className="hidden gap-1 sm:inline-flex">
+                      <span style={{ color: category.color }}>
+                        <AppIcon name={category.icon} className="size-3" />
+                      </span>
+                      {category.name}
+                    </Badge>
+                  )}
+                  <span
+                    className={cn(
+                      "shrink-0 text-sm font-medium tabular-nums",
+                      tx.type === "income" && "text-green-600 dark:text-green-500",
+                      tx.type === "expense" && "text-red-600 dark:text-red-500"
+                    )}
+                  >
+                    {tx.type === "expense" ? "-" : tx.type === "income" ? "+" : ""}
+                    {formatMoney(tx.amountMinor, tx.currency)}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
