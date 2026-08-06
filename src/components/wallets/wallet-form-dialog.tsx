@@ -98,6 +98,11 @@ export function WalletFormDialog({ open, onOpenChange, wallet }: WalletFormDialo
     e.preventDefault();
     if (!user) return;
 
+    if (!name.trim()) {
+      toast.error("Wallet name is required");
+      return;
+    }
+
     let initialBalanceMinor = 0;
     let creditLimitMinor: number | undefined;
     let creditDueDayNum: number | undefined;

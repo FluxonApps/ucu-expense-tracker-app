@@ -40,6 +40,11 @@ export function subscribeToWallets(
 }
 
 export async function createWallet(uid: string, input: WalletInput): Promise<string> {
+  const name = input.name.trim();
+  if (!name) {
+    throw new Error("Wallet name is required");
+  }
+
   if (input.walletType === "credit" && (!input.creditLimitMinor || input.creditLimitMinor <= 0)) {
     throw new Error("Credit wallets require a positive credit limit");
   }
@@ -51,7 +56,7 @@ export async function createWallet(uid: string, input: WalletInput): Promise<str
 
   const ref = await addDoc(walletsRef(uid), {
     id: "",
-    name: input.name,
+    name,
     currency: input.currency,
     balanceMinor,
     icon: input.icon,
@@ -82,8 +87,13 @@ export async function updateWallet(
   walletId: string,
   input: WalletUpdateInput
 ): Promise<void> {
+  const name = input.name.trim();
+  if (!name) {
+    throw new Error("Wallet name is required");
+  }
+
   const updates: Record<string, unknown> = {
-    name: input.name,
+    name,
     icon: input.icon,
     color: input.color,
   };
