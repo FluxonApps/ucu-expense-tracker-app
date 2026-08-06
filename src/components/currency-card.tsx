@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { ArrowDownRight, ArrowUpRight, RefreshCw, ArrowRightLeft } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ArrowRightLeft } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, YAxis, Tooltip } from "recharts";
 
 const FlagUSD = () => (
@@ -133,8 +133,7 @@ export function CurrencyCard() {
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             {CURRENCY_FLAGS[selectedCurrency]} Exchange Rates
           </CardTitle>
-          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-            <RefreshCw className="size-3 text-muted-foreground animate-spin-slow" />
+          <p className="text-xs text-muted-foreground mt-0.5">
             Monobank / NBU API (UAH)
           </p>
         </div>
