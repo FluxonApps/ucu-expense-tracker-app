@@ -1168,7 +1168,20 @@ const confirmGoalUpdate = async () => {
               <BarChart data={dailyData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} interval={0} />
-                <YAxis tickLine={false} axisLine={false} fontSize={11} width={50} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={11}
+                  width={50}
+                  tickFormatter={(value) =>
+                    Math.abs(value) >= 10000
+                      ? new Intl.NumberFormat("en-US", {
+                          notation: "compact",
+                          maximumFractionDigits: 2,
+                        }).format(value)
+                      : `${value}`
+                  }
+                />
                 <Tooltip
                   formatter={(value) => [`${Number(value).toLocaleString("uk-UA")} ${CURRENCY_SYMBOLS[displayCurrency]}`, "Spent"]}
                 />
