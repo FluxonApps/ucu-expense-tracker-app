@@ -680,8 +680,8 @@ const confirmGoalUpdate = async () => {
 
             {/* Budget goals */}
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <div>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div className="space-y-1">
             <CardTitle className="text-base">
               Budget goals
             </CardTitle>
@@ -695,6 +695,7 @@ const confirmGoalUpdate = async () => {
             type="button"
             variant="outline"
             size="sm"
+            className="shrink-0"
             onClick={openCreateGoalDialog}
           >
             <Plus className="size-4" />
